@@ -5,7 +5,7 @@ def readme():
     return f.read()
 
 setup(
-  name='py_rutracker',
+  name='py_rutracker_client',
   version='0.0.10',
   author='GvozdevAD',
   author_email='alexander@gvozdev.net',
@@ -31,7 +31,6 @@ setup(
   ],
   keywords='rutracker torrent',
   project_urls={
-
   },
   python_requires='>=3.7'
 )

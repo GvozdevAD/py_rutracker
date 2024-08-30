@@ -223,9 +223,8 @@ class RuTrackerClient:
         """
         Метод, вызываемый при выходе из контекста менеджера ресурсов.
         """
+        
         self.session.close()
         if exc_type is not None:
             print(f"Произошла ошибка: {exc_value}")
         return False
-
-

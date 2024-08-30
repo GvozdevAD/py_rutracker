@@ -7,3 +7,7 @@ main.py
 .DS_Store
 /**/.DS_Store
 /py_rutracker/async_client.py
+py_rutracker_client.egg-info/
+build/
+dist/
+.pypirc
