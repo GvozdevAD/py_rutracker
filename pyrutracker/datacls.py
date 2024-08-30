@@ -5,6 +5,7 @@ class SearchResult:
     """
     Класс для хранения информации о результатах поиска на RuTracker.
 
+    :param topic_id: Идентификатор результата.
     :param approved: Статус проверки результата.
     :param category: Категория, в которой размещён результат.
     :param category_url: URL категории, где размещён результат.
@@ -19,6 +20,7 @@ class SearchResult:
     :param download_counter: Счётчик скачиваний результата.
     :param added: Дата и время добавления результата.
     """
+    topic_id: int
     approved: str
     category: str
     category_url: str
@@ -35,12 +37,15 @@ class SearchResult:
     added: str
     
     def __str__(self):
-        return (f"Title: {self.title}\n"
-                f"Author: {self.author}\n"
-                f"Сategory: {self.category}\n"
-                f"Size: {self.size} {self.unit}\n"
-                f"Download URL: {self.download_url}\n"
-                f"Added: {self.added}\n"
-                f"Seed: {self.seedmed}\n"
-                f"Leech: {self.leechmed}\n"
-                f"Download Counter: {self.download_counter}")
+        return (
+            f"Topic ID: {self.topic_id}\n" 
+            f"Title: {self.title}\n"
+            f"Author: {self.author}\n"
+            f"Сategory: {self.category}\n"
+            f"Size: {self.size} {self.unit}\n"
+            f"Download URL: {self.download_url}\n"
+            f"Added: {self.added}\n"
+            f"Seed: {self.seedmed}\n"
+            f"Leech: {self.leechmed}\n"
+            f"Download Counter: {self.download_counter}"
+        )

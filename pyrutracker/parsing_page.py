@@ -13,20 +13,23 @@ class ParsingPage:
     def search(
             html: str,
             return_dict_format: bool = False
-    ):
+    ) -> list[SearchResult | dict]:
         """Парсит HTML и возвращает результаты поиска в указанном формате."""
         results = []
 
         soup = BeautifulSoup(html, features="lxml")
         table = soup.find("table", id="tor-tbl")
+        if not table:
+            return results
         rows = table.find("tbody").find_all("tr")
         
         for row in rows:
             info_row = row.find_all("td")[1:]
             if not info_row:
                 break
-
+            
             approved = info_row[0].get("title")
+            
             
             if approved == "закрыто":
                 continue
@@ -40,6 +43,8 @@ class ParsingPage:
             title_url = info_row[2].find("a").get("href", "")
             if title_url:
                 title_url = f"{Url.FORUM.value}/{title_url}"
+            topic_id = int(info_row[2].find("a").get("data-topic_id"))
+
             
             author = info_row[3].find("a").text
             author_url = info_row[3].find("a").get("href")
@@ -60,6 +65,7 @@ class ParsingPage:
             added = convert_unix_to_local_time(int(info_row[8]["data-ts_text"]))
 
             result = {
+                    "topic_id": topic_id,
                     "approved": approved, 
                     "category": category, 
                     "category_url": category_url, 

@@ -1,11 +1,14 @@
 class RuTrackerException(Exception):
-    """Основное исключение для ошибок RuTracker."""
+    """ Основное исключение для ошибок """
 
-class RuTrackerAuthException(RuTrackerException):
-    """Исключение для ошибок аутентификации RuTracker."""
+class RuTrackerAuthError(RuTrackerException):
+    """ Исключение для ошибок аутентификации """
 
-class RuTrackerRequestException(RuTrackerException):
-    """Исключение для ошибок HTTP-запросов RuTracker."""
+class RuTrackerRequestError(RuTrackerException):
+    """ Исключение для ошибок HTTP-запросов """
 
-class RuTrackerParsingException(RuTrackerException):
-    """Исключение для ошибок парсинга RuTracker."""
+class RuTrackerParsingError(RuTrackerException):
+    """ Исключение для ошибок парсинга """
+
+class RuTrackerDownloadError(RuTrackerException):
+    """ Исключение для ошибки скачивания торент файла """

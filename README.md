@@ -86,6 +86,7 @@ with RuTrackerClient(login="your_login", password="your_password") as client:
 ## Пример вывода
 ```sh
 ...
+Topic ID: 65341
 Title: (Industrial, Alternative) Static-X - Start A War - 2005, APE (image + .cue), lossless
 Author: SLTK
 Category: Alternative & Nu-metal (lossless)

@@ -1,5 +1,7 @@
 env
 TEST
+tests
+.pytest_cache
 main.py
 /**/__pycache__
 /pyrutracker/async_client.py

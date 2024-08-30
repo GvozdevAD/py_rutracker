@@ -3,9 +3,10 @@ import requests
 from .datacls import SearchResult
 from .enums import Url
 from .exceptions import (
-    RuTrackerAuthException, 
-    RuTrackerRequestException, 
-    RuTrackerParsingException
+    RuTrackerAuthError, 
+    RuTrackerDownloadError,
+    RuTrackerParsingError,
+    RuTrackerRequestError, 
 )
 from .parsing_page import ParsingPage
 
@@ -46,7 +47,7 @@ class RuTrackerClient:
     def _send_request(
             self, 
             url: str, 
-            params: dict
+            params: dict = None
     ) -> requests.Response:
         """
         Отправляет GET-запрос на указанный URL с параметрами.
@@ -54,13 +55,18 @@ class RuTrackerClient:
         :param url: URL для отправки запроса.
         :param params: Параметры запроса.
         :return: Объект requests.Response с ответом от сервера.
-        :raises RuTrackerRequestException: Если статус-код ответа не 200 или содержимое страницы указывает на необходимость аутентификации.
+        :raises RuTrackerAuthError: Если статус-код ответа не 200 или содержимое страницы указывает на необходимость аутентификации.
         """
-        response = self.session.get(url, params=params)
+        try:
+            response = self.session.get(url, params=params)
+        except Exception as _ex:
+            raise RuTrackerAuthError(
+                f"Ошибка при выполнении запроса: {_ex}"
+            )
         if response.status_code != 200:
-            raise RuTrackerRequestException(f"Ошибка запроса: статус-код {response.status_code}")
+            raise RuTrackerRequestError(f"Ошибка запроса: статус-код {response.status_code}")
         if "top-login-box" in response.text:
-            raise RuTrackerRequestException("Необходима аутентификация.")
+            raise RuTrackerRequestError("Необходима аутентификация.")
         return response
 
     def auth(
@@ -73,7 +79,7 @@ class RuTrackerClient:
 
         :param login: Логин для аутентификации.
         :param password: Пароль для аутентификации.
-        :raises RuTrackerAuthException: Если статус-код ответа не 200, 
+        :raises RuTrackerAuthError: Если статус-код ответа не 200, 
                 аутентификация не удалась, или обнаружена капча.
         """
         data = {
@@ -87,19 +93,19 @@ class RuTrackerClient:
                 data=data
             )
         except Exception as _ex:
-            raise RuTrackerAuthException(
+            raise RuTrackerAuthError(
                 f"Ошибка при выполнении запроса: {_ex}"
             )
         if response.status_code != 200:
-            raise RuTrackerAuthException(
+            raise RuTrackerAuthError(
                 f"Ошибка аутентификации: статус-код {response.status_code}"
             )
         if "cap_sid" in response.text:
-            raise RuTrackerAuthException(
+            raise RuTrackerAuthError(
                 "Найдена капча при аутентификацию! Пройдите ее в браузере и попробуйте еще раз!"
             )
         if not self.session.cookies:
-            raise RuTrackerAuthException(
+            raise RuTrackerAuthError(
                 "Не удалось выполнить аутентификацию."
             )
 
@@ -116,18 +122,22 @@ class RuTrackerClient:
         :param page: Номер страницы для поиска (по умолчанию 1).
         :param return_search_dict: Флаг, указывающий, следует ли возвращать результаты в виде словарей (если True) или объектов SearchResult (если False).
         :return: Список результатов поиска.
-        :raises RuTrackerParsingException: Если происходит ошибка при парсинге результатов поиска.
+        :raises RuTrackerParsingError: Если происходит ошибка при парсинге результатов поиска.
         """
         url = Url.SEARCH.value
         params = {
             "start": (page-1)*50,
             "nm": title,
         }
-        response = self._send_request(url, params)
+        try:
+            response = self._send_request(url, params)
+        except RuTrackerRequestError as _ex:
+            raise RuTrackerRequestError(_ex)
+        
         try:
             results = self.parser.search(response.text, return_search_dict)
         except Exception as _ex:
-            raise RuTrackerParsingException(f"Ошибка парсинга результатов поиска: {_ex}")
+            raise RuTrackerParsingError(f"Ошибка парсинга результатов поиска: {_ex}")
         return results
 
     def search_all_pages(
@@ -155,26 +165,48 @@ class RuTrackerClient:
         
         return all_results
 
-    def get_torrent_file(
+    def download(
             self, 
-            topic_id: int
+            topic_id_or_url: int | str
     ) -> bytes:
         """
-        Получает файл торрента по указанному идентификатору темы.
+        Получает файл торрента по указанному идентификатору или URL.
 
-        :param topic_id: Идентификатор темы (топика) для получения файла торрента.
+        :param topic_id_or_url: Идентификатор (топика) или URL для получения файла торрента.
         :return: Содержимое файла торрента в виде байтов.
 
         :raises RuTrackerRequestException: Если запрос на получение файла торрента завершился ошибкой.
+        :raises RuTrackerDownloadError: Если передан недопустимый параметр.
         """
-        params = {
-            "t": topic_id
-        }
-        response = self._send_request(
-            Url.DOWNLOAD.value,
-            params
-        )
+        if isinstance(topic_id_or_url, int):
+            params = {
+                "t": topic_id_or_url
+            }
+
+            response = self._send_request(
+                Url.DOWNLOAD.value,
+                params
+            )
+
+        elif (isinstance(topic_id_or_url, str) and 
+              topic_id_or_url.startswith(Url.DOWNLOAD.value)
+        ):
+            response = self._send_request(topic_id_or_url)
+
+        else:
+            raise RuTrackerDownloadError(
+                "Передан недопустимый параметр. Ожидался topic_id (int)" \
+                " или URL (str), начинающийся с" \
+                " 'https://rutracker.org/forum/dl.php?t='."
+            )
+
+        if "Error" in response.text:
+            raise RuTrackerDownloadError("Файл с таким ID не найден")
+        
         return response.content
+
+    def get_torrent_file(self, ):
+        """ """
 
     def __enter__(self):
         """
