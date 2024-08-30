@@ -12,9 +12,9 @@ Py_RuTracker — это библиотека для работы с RuTracker, �
   - [Скачать .torrent файл](#скачать-torrent-файл)
 - [Документация](#документация)
   - [Методы класса `RuTrackerClient`](#методы-класса-rutrackerclient)
-    - [`search`](#searchtitle-str-page-int-1-return_search_dict-bool-false-listsearchresult--dict)
-    - [`search_all_pages`](#search_all_pages-title-str-return_search_dict-bool-false-listsearchresult--dict)
-    - [`get_torrent_file`](#get_torrent_file-topic_id-int-bytes)
+    - `search`
+    - `search_all_pages`
+    - `download`
 - [Примечания](#примечания)
 
 
