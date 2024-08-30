@@ -2,3 +2,4 @@ env
 TEST
 main.py
 /**/__pycache__
+/pyrutracker/async_client.py

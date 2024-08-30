@@ -15,31 +15,32 @@ class RuTrackerClient:
             self,
             login: str,
             password: str,
-            proxy: dict = {"http":"", "https":""}
+            proxies: dict = None
     ) -> None:
         """
         Инициализирует клиент RuTracker.
 
         :param login: Логин для аутентификации.
         :param password: Пароль для аутентификации.
-        :param proxy: Словарь с прокси-серверами для HTTP и HTTPS.
+        :param proxies: Словарь с прокси-серверами для HTTP и HTTPS.
         """
-        self.session = self._init_session(proxy)
+        self.session = self._init_session(proxies)
         self.auth(login, password)
         self.parser = ParsingPage()
 
     def _init_session(
             self, 
-            proxy: dict[str,str]
+            proxies: dict[str,str]
     ) -> requests.Session:
         """
         Инициализирует сессию requests с заданными прокси.
 
-        :param proxy: Словарь с прокси-серверами для HTTP и HTTPS.
+        :param proxies: Словарь с прокси-серверами для HTTP и HTTPS.
         :return: Объект requests.Session с обновленными прокси.
         """
         session = requests.session()
-        session.proxies.update(proxy)
+        if proxies:
+            session.proxies.update(proxies)
         return session
 
     def _send_request(
@@ -85,23 +86,23 @@ class RuTrackerClient:
                 Url.AUTH.value, 
                 data=data
             )
-            if response.status_code != 200:
-                raise RuTrackerAuthException(
-                    f"Ошибка аутентификации: статус-код {response.status_code}"
-                )
-            if "cap_sid" in response.text:
-                raise RuTrackerAuthException(
-                    "Найдена капча при аутентификацию! Пройдите ее в браузере и попробуйте еще раз!"
-                )
-            if not self.session.cookies:
-                raise RuTrackerAuthException(
-                    "Не удалось выполнить аутентификацию."
-                )
         except Exception as _ex:
             raise RuTrackerAuthException(
                 f"Ошибка при выполнении запроса: {_ex}"
             )
-    
+        if response.status_code != 200:
+            raise RuTrackerAuthException(
+                f"Ошибка аутентификации: статус-код {response.status_code}"
+            )
+        if "cap_sid" in response.text:
+            raise RuTrackerAuthException(
+                "Найдена капча при аутентификацию! Пройдите ее в браузере и попробуйте еще раз!"
+            )
+        if not self.session.cookies:
+            raise RuTrackerAuthException(
+                "Не удалось выполнить аутентификацию."
+            )
+
     def search(
             self, 
             title: str, 
@@ -174,4 +175,20 @@ class RuTrackerClient:
             params
         )
         return response.content
+
+    def __enter__(self):
+        """
+        Метод, вызываемый при входе в контекст менеджера ресурсов.
+        """
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """
+        Метод, вызываемый при выходе из контекста менеджера ресурсов.
+        """
+        self.session.close()
+        if exc_type is not None:
+            print(f"Произошла ошибка: {exc_value}")
+        return False
+
 
