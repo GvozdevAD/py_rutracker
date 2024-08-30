@@ -4,4 +4,4 @@ tests
 .pytest_cache
 main.py
 /**/__pycache__
-/pyrutracker/async_client.py
+/py_rutracker/async_client.py

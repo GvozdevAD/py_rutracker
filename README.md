@@ -1,6 +1,6 @@
-# PyRuTracker
+# Py_RuTracker
 
-PyRuTracker — это библиотека для работы с RuTracker, популярным российским торрент-трекером. Она предоставляет удобный интерфейс для поиска и получения информации о раздачах на RuTracker.
+Py_RuTracker — это библиотека для работы с RuTracker, популярным российским торрент-трекером. Она предоставляет удобный интерфейс для поиска и получения информации о раздачах на RuTracker.
 
 ## Содержание
 
@@ -8,6 +8,8 @@ PyRuTracker — это библиотека для работы с RuTracker, п
 - [Пример использования](#пример-использования)
   - [Обычное использование](#обычное-использование)
   - [Использование через контекстный менеджер](#использование-через-контекстный-менеджер)
+  - [Пример вывода](#пример-вывода)
+  - [Скачать .torrent файл](#скачать-torrent-файл)
 - [Документация](#документация)
   - [Методы класса `RuTrackerClient`](#методы-класса-rutrackerclient)
     - [`search`](#searchtitle-str-page-int-1-return_search_dict-bool-false-listsearchresult--dict)
@@ -21,8 +23,8 @@ PyRuTracker — это библиотека для работы с RuTracker, п
 Для установки PyRuTracker и всех необходимых зависимостей выполните следующие шаги:
 1. Клонируйте репозиторий:
     ```sh
-    git clone https://github.com/GvozdevAD/PyRuTracker
-    cd pyrutracker
+    git clone https://github.com/GvozdevAD/py_rutracker
+    cd py_rutracker
     ```
 2. Создайте виртуальное окружение с помощью `venv`:
     ```sh
@@ -49,7 +51,7 @@ PyRuTracker — это библиотека для работы с RuTracker, п
 
 Если вам нужно использовать прокси, вы можете создать словарь с прокси-серверами:
 ```python
-from pyrutracker import RuTrackerClient
+from py_rutracker import RuTrackerClient
 
 proxies = {
     'http': 'http://<PROXY_IP_ADDRESS>:<PROXY_PORT>',
@@ -74,7 +76,7 @@ for torrent in results:
 Вы можете использовать RuTrackerClient через контекстный менеджер with, чтобы автоматически закрыть соединение после завершения работы:
 
 ```python
-from pyrutracker import RuTrackerClient
+from py_rutracker import RuTrackerClient
 
 with RuTrackerClient(login="your_login", password="your_password") as client:
     results = client.search_all_pages("Static-X")
@@ -83,7 +85,7 @@ with RuTrackerClient(login="your_login", password="your_password") as client:
 
 ```
 
-## Пример вывода
+### Пример вывода
 ```sh
 ...
 Topic ID: 65341
@@ -97,6 +99,18 @@ Seed: 10
 Leech: 0
 Download Counter: 2526
 ...
+```
+
+### Скачать .torrent файл
+```python
+from py_rutracker import RuTrackerClient
+
+with RuTrackerClient("login", "password") as client:
+     results = client.search_all_pages("Static-X")
+     topic_id = results[0].topic_id
+     bytes_data = client.download(topic_id)
+     with open(f"{topic_id}.torrent", "wb") as file:
+          file.write(bytes_data)
 ```
 
 ## Документация

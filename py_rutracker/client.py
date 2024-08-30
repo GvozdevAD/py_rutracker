@@ -55,7 +55,8 @@ class RuTrackerClient:
         :param url: URL для отправки запроса.
         :param params: Параметры запроса.
         :return: Объект requests.Response с ответом от сервера.
-        :raises RuTrackerAuthError: Если статус-код ответа не 200 или содержимое страницы указывает на необходимость аутентификации.
+        :raises RuTrackerAuthError: Если статус-код ответа не 200 или содержимое 
+        страницы указывает на необходимость аутентификации.
         """
         try:
             response = self.session.get(url, params=params)
@@ -64,7 +65,9 @@ class RuTrackerClient:
                 f"Ошибка при выполнении запроса: {_ex}"
             )
         if response.status_code != 200:
-            raise RuTrackerRequestError(f"Ошибка запроса: статус-код {response.status_code}")
+            raise RuTrackerRequestError(
+                f"Ошибка запроса: статус-код {response.status_code}"
+            )
         if "top-login-box" in response.text:
             raise RuTrackerRequestError("Необходима аутентификация.")
         return response
@@ -102,7 +105,8 @@ class RuTrackerClient:
             )
         if "cap_sid" in response.text:
             raise RuTrackerAuthError(
-                "Найдена капча при аутентификацию! Пройдите ее в браузере и попробуйте еще раз!"
+                "Найдена капча при аутентификацию!"\
+                " Пройдите ее в браузере и попробуйте еще раз!"
             )
         if not self.session.cookies:
             raise RuTrackerAuthError(
@@ -120,7 +124,8 @@ class RuTrackerClient:
 
         :param title: Заголовок для поиска.
         :param page: Номер страницы для поиска (по умолчанию 1).
-        :param return_search_dict: Флаг, указывающий, следует ли возвращать результаты в виде словарей (если True) или объектов SearchResult (если False).
+        :param return_search_dict: Флаг, указывающий, следует ли возвращать результаты
+        в виде словарей (если True) или объектов SearchResult (если False).
         :return: Список результатов поиска.
         :raises RuTrackerParsingError: Если происходит ошибка при парсинге результатов поиска.
         """
