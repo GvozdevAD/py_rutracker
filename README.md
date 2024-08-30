@@ -60,7 +60,7 @@ proxies = {
 }
 
 # Создание клиента с вашими учетными данными и прокси (если необходимо)
-client = RuTrackerClient("your_login", "your_password", proxy)
+client = RuTrackerClient("your_login", "your_password", proxies)
 
 # Поиск раздач по запросу
 results = client.search_all_pages("Static-X")
