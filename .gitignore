@@ -4,4 +4,5 @@ tests
 .pytest_cache
 main.py
 /**/__pycache__
+/**/.DS_Store
 /py_rutracker/async_client.py

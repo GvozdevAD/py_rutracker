@@ -105,7 +105,7 @@ Download Counter: 2526
 ```python
 from py_rutracker import RuTrackerClient
 
-with RuTrackerClient("login", "password") as client:
+with RuTrackerClient("your_login", "your_password") as client:
      results = client.search_all_pages("Static-X")
      topic_id = results[0].topic_id
      bytes_data = client.download(topic_id)
