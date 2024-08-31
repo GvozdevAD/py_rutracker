@@ -44,11 +44,11 @@ pip install py-rutracker-client
 3. Активируйте виртуальное окружение:
     * На Windows:
         ```sh
-        venv\Scripts\activate
+        env\Scripts\activate
         ```
     * На macOS и Linux:
         ```sh
-        source venv/bin/activate
+        source env/bin/activate
         ```
 4. Установите зависимости из `requirements.txt`:
     ```sh
