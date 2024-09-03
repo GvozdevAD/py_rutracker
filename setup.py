@@ -6,10 +6,10 @@ def readme():
 
 setup(
   name='py_rutracker_client',
-  version='0.0.10',
+  version='0.0.11',
   author='GvozdevAD',
   author_email='alexander@gvozdev.net',
-  description='',
+  description='Rutracker Client',
   long_description=readme(),
   long_description_content_type='text/markdown',
   url='https://github.com/GvozdevAD/py_rutracker',

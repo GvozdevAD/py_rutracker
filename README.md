@@ -5,7 +5,8 @@ Py_RuTracker — это библиотека для работы с RuTracker, �
 ## Содержание
 
 - [Установка](#установка)
-- [Пример использования](#пример-использования)
+- [Пример использования AsyncRuTrackerClient](#пример-использования-asyncrutrackerclient)
+- [Пример использования RuTrackerClient](#пример-использования-rutrackerclient)
   - [Обычное использование](#обычное-использование)
   - [Использование через контекстный менеджер](#использование-через-контекстный-менеджер)
   - [Пример вывода](#пример-вывода)
@@ -55,8 +56,29 @@ pip install py-rutracker-client
     pip install -r requirements.txt
     ```
 
+## Пример использования AsyncRuTrackerClient
 
-## Пример использования
+```python
+
+import asyncio
+
+from py_rutracker import AsyncRuTrackerClient
+
+login = "your_login"
+password = "your_password"
+proxies = 'http://<PROXY_IP_ADDRESS>:<PROXY_PORT>'
+
+async def main():
+     async with AsyncRuTrackerClient(login, password, proxies) as client:
+          results = await client.search_all_pages("rammstein")
+          bytes_data = await client.download(results[0].download_url)
+          with open(f"{results[0].topic_id}.torrent", "wb") as file:
+               file.write(bytes_data)
+
+asyncio.run(main())
+```
+
+## Пример использования RuTrackerClient
 
 ### Обычное использование
 
@@ -67,9 +89,6 @@ from py_rutracker import RuTrackerClient
 proxies = {
     'http': 'http://<PROXY_IP_ADDRESS>:<PROXY_PORT>',
     'https': 'http://<PROXY_IP_ADDRESS>:<PROXY_PORT>'
-    # Или:
-    # 'http': 'socks5://<PROXY_IP_ADDRESS>:<PROXY_PORT>',
-    # 'https': 'socks5://<PROXY_IP_ADDRESS>:<PROXY_PORT>'
 }
 
 # Создание клиента с вашими учетными данными и прокси (если необходимо)

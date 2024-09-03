@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+
 @dataclass
 class SearchResult:
     """
@@ -49,3 +50,12 @@ class SearchResult:
             f"Leech: {self.leechmed}\n"
             f"Download Counter: {self.download_counter}"
         )
+
+
+@dataclass
+class ResponseRuTracker:
+    """
+    """
+    success: bool
+    results: SearchResult
+    

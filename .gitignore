@@ -11,3 +11,4 @@ py_rutracker_client.egg-info/
 build/
 dist/
 .pypirc
+asyn_client.py

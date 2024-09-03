@@ -93,7 +93,7 @@ class RuTrackerClient:
         try:
             response = self.session.post(
                 Url.AUTH.value, 
-                data=data
+                data=data,
             )
         except Exception as _ex:
             raise RuTrackerAuthError(
