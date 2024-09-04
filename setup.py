@@ -6,7 +6,7 @@ def readme():
 
 setup(
   name='py_rutracker_client',
-  version='0.0.11',
+  version='0.1.0',
   author='GvozdevAD',
   author_email='alexander@gvozdev.net',
   description='Rutracker Client',
@@ -23,6 +23,7 @@ setup(
         "requests>=2.32.3",
         "soupsieve>=2.6",
         "urllib3>=2.2.2",
+        "aiohttp>=3.10.5",
     ],
   classifiers=[
     'Programming Language :: Python :: 3.11',
