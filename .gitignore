@@ -12,3 +12,4 @@ build/
 dist/
 dist_ver/
 .pypirc
+docs/

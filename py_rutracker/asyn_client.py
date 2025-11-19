@@ -66,7 +66,6 @@ class AsyncRuTrackerClient:
                 ssl=self._ssl_context
             ) as response:
                 text = await response.text()
-                print(text)
                 if response.status != 200:
                     raise RuTrackerAuthError(f"Ошибка аутентификации: статус-код {response.status}")
                 if "cap_sid" in text:
