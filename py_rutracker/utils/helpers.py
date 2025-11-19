@@ -27,6 +27,7 @@ def format_size(bytes: int) -> tuple[float, str]:
     else:
         return float(bytes), 'bytes'
 
+
 def convert_unix_to_local_time(
         epoch: int, 
         offset_hours: int = 3
@@ -42,8 +43,10 @@ def convert_unix_to_local_time(
     offset = dt + timedelta(hours=offset_hours)
     return offset.strftime('%d-%m-%Y %H:%M:%S')
 
+
 def is_integer(value: str) -> bool:
     """
     Проверяет, является ли строка целым числом.
     """
     return value.isdigit()
+

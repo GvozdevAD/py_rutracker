@@ -13,3 +13,4 @@ dist/
 dist_ver/
 .pypirc
 docs/
+test.py

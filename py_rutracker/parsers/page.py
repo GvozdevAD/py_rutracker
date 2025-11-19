@@ -1,12 +1,13 @@
 from bs4 import BeautifulSoup
 
-from .datacls import SearchResult
-from .enums import Url
-from .utils import (
+from ..models.search import SearchResult
+from ..enums import Url
+from ..utils.helpers import (
     format_size,
     convert_unix_to_local_time,
     is_integer
 )
+
 
 class ParsingPage:
     @staticmethod
@@ -58,35 +59,37 @@ class ParsingPage:
                 download_url = f"{Url.FORUM.value}/{download_url}"
 
             seedmed_text = info_row[5].text.strip()
-            seedmed = int(seedmed_text) if is_integer(seedmed_text) else 0
-            
-            leechmed = int(info_row[6].text)
-            download_counter = int(info_row[7].text)
+            leechmed_text = info_row[6].text.strip()
+            download_counter_text = info_row[7].text.strip()
             added = convert_unix_to_local_time(int(info_row[8]["data-ts_text"]))
 
             result = {
                     "topic_id": topic_id,
-                    "approved": approved, 
+                    "approved": approved or "", 
                     "category": category, 
-                    "category_url": category_url, 
+                    "category_url": category_url or None, 
                     "title": title,
-                    "title_url": title_url,
+                    "title_url": title_url or None,
                     "author": author,
-                    "author_url": author_url,
+                    "author_url": author_url or None,
                     "size": size,
                     "unit": unit,
                     "download_url": download_url,
-                    "seedmed": seedmed,
-                    "leechmed": leechmed,
-                    "download_counter": download_counter,
+                    "seedmed": seedmed_text,  # Pydantic автоматически преобразует через валидатор
+                    "leechmed": leechmed_text,
+                    "download_counter": download_counter_text,
                     "added": added
                 }
             if return_dict_format:
                 results.append(result)
             else:
-                results.append(
-                    SearchResult(** result)
-                )
+                try:
+                    # Pydantic автоматически валидирует и преобразует типы
+                    results.append(SearchResult(**result))
+                except Exception as e:
+                    # Если валидация не прошла, пропускаем этот результат
+                    # Можно добавить логирование для отладки
+                    continue
         return results
 
     @staticmethod
@@ -94,3 +97,4 @@ class ParsingPage:
             html: str,
     ):
         """ """
+
