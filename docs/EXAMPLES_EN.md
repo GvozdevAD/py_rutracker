@@ -200,6 +200,8 @@ file_path = client.download(url, save_path="./torrents")
 
 ### Working with Search Form
 
+#### Getting Form Data
+
 ```python
 from py_rutracker import RuTrackerClient
 
@@ -250,6 +252,257 @@ print(f"Data retrieved from cache: {form_data_cached == form_data}")
 print("\n\nForce cache refresh:")
 form_data_refreshed = client.get_search_form(force_refresh=True)
 print(f"Cache updated, groups received: {len(form_data_refreshed.forum_groups)}")
+```
+
+#### Search via Form with Sorting Parameters
+
+```python
+from py_rutracker import RuTrackerClient
+
+client = RuTrackerClient("your_login", "your_password")
+
+# Simple search via form (uses default values from form)
+results = client.search_with_form("Static-X")
+print(f"Found results: {len(results)}")
+
+# Search with sorting by date (descending - newest first)
+results = client.search_with_form(
+    "Static-X",
+    sort_option=10,  # By date added
+    sort_direction=2  # Descending (2 = descending, 1 = ascending)
+)
+
+for result in results[:5]:  # First 5 results
+    print(f"{result.title} - Added: {result.added}")
+
+# Search with sorting by size (ascending - from smaller to larger)
+results = client.search_with_form(
+    "Static-X",
+    sort_option=7,   # By size
+    sort_direction=1  # Ascending
+)
+
+for result in results[:5]:
+    print(f"{result.title} - Size: {result.size} {result.unit}")
+
+# Search with sorting by download count (descending)
+results = client.search_with_form(
+    "Static-X",
+    sort_option=8,   # By download count
+    sort_direction=2  # Descending
+)
+
+for result in results[:5]:
+    print(f"{result.title} - Downloads: {result.download_counter}")
+```
+
+#### Search in Specific Forums
+
+```python
+from py_rutracker import RuTrackerClient
+
+client = RuTrackerClient("your_login", "your_password")
+
+# Get list of forums from form
+form_data = client.get_search_form()
+
+# Find music forum IDs (example)
+music_forums = []
+for group in form_data.forum_groups:
+    if "Music" in group.name or "Музыка" in group.name:
+        for section in group.sections:
+            music_forums.append(section.id)
+
+print(f"Found music forums: {len(music_forums)}")
+
+# Search only in music forums
+results = client.search_with_form(
+    "Static-X",
+    forum_ids=music_forums[:5],  # First 5 forums
+    sort_option=10,
+    sort_direction=2
+)
+
+print(f"Found results in music forums: {len(results)}")
+for result in results:
+    print(f"{result.category}: {result.title}")
+```
+
+#### Search with Time Filter
+
+```python
+from py_rutracker import RuTrackerClient
+
+client = RuTrackerClient("your_login", "your_password")
+
+# Get available time filters
+form_data = client.get_search_form()
+print("Available time filters:")
+for time_filter in form_data.time_filter_options:
+    print(f"  {time_filter.value}: {time_filter.name}")
+
+# Search for last 7 days
+results = client.search_with_form(
+    "Static-X",
+    time_filter=7,  # Last 7 days
+    sort_option=10,
+    sort_direction=2
+)
+
+print(f"Found results for last 7 days: {len(results)}")
+for result in results:
+    print(f"{result.title} - Added: {result.added}")
+
+# Search for last 30 days
+results = client.search_with_form(
+    "Static-X",
+    time_filter=30,  # Last 30 days
+    sort_option=10,
+    sort_direction=2
+)
+
+print(f"Found results for last 30 days: {len(results)}")
+```
+
+#### Search All Pages via Form
+
+```python
+from py_rutracker import RuTrackerClient
+
+client = RuTrackerClient("your_login", "your_password")
+
+# Search all pages via form with sorting
+# Automatically uses POST for first page and GET with search_id for the rest
+all_results = client.search_all_pages_with_form(
+    "Static-X",
+    max_pages=10,
+    sort_option=10,  # By date
+    sort_direction=2  # Descending
+)
+
+print(f"Found results on all pages: {len(all_results)}")
+
+# Group by categories
+categories = {}
+for result in all_results:
+    if result.category not in categories:
+        categories[result.category] = []
+    categories[result.category].append(result)
+
+print("\nResults by category:")
+for category, results in sorted(categories.items()):
+    print(f"{category}: {len(results)} results")
+```
+
+#### Combining Search Parameters
+
+```python
+from py_rutracker import RuTrackerClient
+
+client = RuTrackerClient("your_login", "your_password")
+
+# Complex search: specific forums + time filter + sorting
+results = client.search_with_form(
+    "Static-X",
+    forum_ids=[1950, 1951],  # Specific forums
+    time_filter=7,            # Last 7 days
+    sort_option=10,           # By date
+    sort_direction=2          # Descending
+)
+
+print(f"Found results with applied filters: {len(results)}")
+for result in results:
+    print(f"[{result.category}] {result.title}")
+    print(f"  Size: {result.size} {result.unit}")
+    print(f"  Added: {result.added}")
+    print(f"  Downloads: {result.download_counter}")
+    print()
+```
+
+#### Using Default Values from Form
+
+```python
+from py_rutracker import RuTrackerClient
+
+client = RuTrackerClient("your_login", "your_password")
+
+# Get form to view default values
+form_data = client.get_search_form()
+
+# Use properties for quick access to default values
+if form_data.default_sort_option:
+    print(f"Default sort option: {form_data.default_sort_option.value} - {form_data.default_sort_option.name}")
+
+if form_data.default_sort_direction:
+    print(f"Default sort direction: {form_data.default_sort_direction.value} - {form_data.default_sort_direction.name}")
+
+# Search using default values
+# If sort_option and sort_direction are not specified, they will be taken from the form automatically
+results = client.search_with_form("Static-X")
+print(f"Found results with default settings: {len(results)}")
+
+# Or explicitly specify values from the form
+if form_data.default_sort_option and form_data.default_sort_direction:
+    results = client.search_with_form(
+        "Static-X",
+        sort_option=form_data.default_sort_option.value,
+        sort_direction=form_data.default_sort_direction.value
+    )
+    print(f"Found results with explicitly specified values: {len(results)}")
+```
+
+#### Convenient Search by Name
+
+```python
+from py_rutracker import RuTrackerClient
+
+client = RuTrackerClient("your_login", "your_password")
+
+# Get form
+form_data = client.get_search_form()
+
+# Find sort option by name (partial match, case-insensitive)
+sort_option = form_data.get_sort_option_by_name("date")
+if sort_option:
+    print(f"Found sort option: {sort_option.name} (value={sort_option.value})")
+    results = client.search_with_form("Static-X", sort_option=sort_option.value)
+
+# Find sort direction by name
+sort_direction = form_data.get_sort_direction_by_name("descending")
+if sort_direction:
+    print(f"Found direction: {sort_direction.name} (value={sort_direction.value})")
+    results = client.search_with_form(
+        "Static-X",
+        sort_option=10,
+        sort_direction=sort_direction.value
+    )
+
+# Find time filter by name
+time_filter = form_data.get_time_filter_by_name("7 days")
+if time_filter:
+    print(f"Found filter: {time_filter.name} (value={time_filter.value})")
+    results = client.search_with_form(
+        "Static-X",
+        time_filter=time_filter.value
+    )
+
+# Find forums by group name
+music_forums = form_data.get_forum_ids_by_group_name("Music")
+print(f"Found music forums: {len(music_forums)}")
+if music_forums:
+    results = client.search_with_form(
+        "Static-X",
+        forum_ids=music_forums[:5]  # First 5 forums
+    )
+
+# Find forums by section name (may find multiple)
+film_forums = form_data.get_forum_ids_by_name("Films")
+print(f"Found forums with 'Films' in name: {len(film_forums)}")
+if film_forums:
+    results = client.search_with_form(
+        "Static-X",
+        forum_ids=film_forums
+    )
 ```
 
 ### Using Proxy
@@ -363,6 +616,8 @@ asyncio.run(main())
 
 ### Working with Search Form
 
+#### Getting Form Data
+
 ```python
 import asyncio
 from py_rutracker import AsyncRuTrackerClient
@@ -388,6 +643,129 @@ async def main():
         # Force refresh
         form_data_refreshed = await client.get_search_form(force_refresh=True)
         print(f"Cache updated")
+
+asyncio.run(main())
+```
+
+#### Search via Form with Sorting Parameters
+
+```python
+import asyncio
+from py_rutracker import AsyncRuTrackerClient
+
+async def main():
+    async with AsyncRuTrackerClient("your_login", "your_password") as client:
+        # Simple search via form
+        results = await client.search_with_form("Static-X")
+        print(f"Found results: {len(results)}")
+        
+        # Search with sorting by date (descending)
+        results = await client.search_with_form(
+            "Static-X",
+            sort_option=10,  # By date
+            sort_direction=2  # Descending
+        )
+        
+        for result in results[:5]:
+            print(f"{result.title} - Added: {result.added}")
+        
+        # Search in specific forums with time filter
+        results = await client.search_with_form(
+            "Static-X",
+            forum_ids=[1950, 1951],  # Music forums
+            time_filter=7,            # Last 7 days
+            sort_option=10,
+            sort_direction=2
+        )
+        
+        print(f"\nFound results with filters: {len(results)}")
+
+asyncio.run(main())
+```
+
+#### Search All Pages via Form
+
+```python
+import asyncio
+from py_rutracker import AsyncRuTrackerClient
+
+async def main():
+    async with AsyncRuTrackerClient("your_login", "your_password") as client:
+        # Search all pages via form
+        # Automatically uses POST for first page and GET with search_id for the rest
+        all_results = await client.search_all_pages_with_form(
+            "Static-X",
+            max_pages=10,
+            sort_option=10,
+            sort_direction=2
+        )
+        
+        print(f"Found results on all pages: {len(all_results)}")
+        
+        # Group by categories
+        categories = {}
+        for result in all_results:
+            if result.category not in categories:
+                categories[result.category] = []
+            categories[result.category].append(result)
+        
+        print("\nResults by category:")
+        for category, results in sorted(categories.items()):
+            print(f"{category}: {len(results)} results")
+
+asyncio.run(main())
+```
+
+#### Using Default Values from Form (Async Client)
+
+```python
+import asyncio
+from py_rutracker import AsyncRuTrackerClient
+
+async def main():
+    async with AsyncRuTrackerClient("your_login", "your_password") as client:
+        # Get form to view default values
+        form_data = await client.get_search_form()
+        
+        # Use properties for quick access to default values
+        if form_data.default_sort_option:
+            print(f"Default sort option: {form_data.default_sort_option.value} - {form_data.default_sort_option.name}")
+        
+        if form_data.default_sort_direction:
+            print(f"Default sort direction: {form_data.default_sort_direction.value} - {form_data.default_sort_direction.name}")
+        
+        # Search using default values
+        results = await client.search_with_form("Static-X")
+        print(f"Found results with default settings: {len(results)}")
+
+asyncio.run(main())
+```
+
+#### Convenient Search by Name (Async Client)
+
+```python
+import asyncio
+from py_rutracker import AsyncRuTrackerClient
+
+async def main():
+    async with AsyncRuTrackerClient("your_login", "your_password") as client:
+        # Get form
+        form_data = await client.get_search_form()
+        
+        # Find sort option by name
+        sort_option = form_data.get_sort_option_by_name("date")
+        if sort_option:
+            print(f"Found sort option: {sort_option.name} (value={sort_option.value})")
+            results = await client.search_with_form("Static-X", sort_option=sort_option.value)
+        
+        # Find forums by group name
+        music_forums = form_data.get_forum_ids_by_group_name("Music")
+        print(f"Found music forums: {len(music_forums)}")
+        if music_forums:
+            results = await client.search_with_form(
+                "Static-X",
+                forum_ids=music_forums[:5]  # First 5 forums
+            )
 
 asyncio.run(main())
 ```

@@ -2,26 +2,29 @@ import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 from time import time
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 from ..core.constants import DEFAULT_MAX_SEARCH_PAGES, SEARCH_PAGE_SIZE
 from ..enums import Url
 from ..exceptions import (
-    RuTrackerDownloadError,
     RuTrackerParsingError,
-    RuTrackerRequestError,
 )
 from ..models.search import SearchResult
 from ..models.search_form import SearchFormData
+from ..logger import get_logger
 from ..parsers.page import ParsingPage
 from ..parsers.search_form import SearchFormParser
 from ..utils.validators import (
     build_search_params,
+    build_search_form_params,
+    build_search_pagination_params,
     get_auth_data,
     validate_auth_response,
     validate_login_password,
     validate_topic_id_or_url,
 )
+
+logger = get_logger(__name__)
 
 
 class BaseRuTrackerClient(ABC):
@@ -287,3 +290,99 @@ class BaseRuTrackerClient(ABC):
         :raises RuTrackerParsingError: Если произошла ошибка при парсинге формы.
         """
         pass
+    
+    def _get_default_sort_option(self) -> Optional[int]:
+        """
+        Получает выбранную опцию сортировки из SearchFormData.
+        
+        :return: Значение опции сортировки или None, если форма не загружена.
+        """
+        form_data = self._get_search_form_cache()
+        if form_data and form_data.sort_options:
+            for option in form_data.sort_options:
+                if option.is_selected:
+                    return option.value
+            if form_data.sort_options:
+                return form_data.sort_options[0].value
+        return None
+    
+    def _get_default_sort_direction(self) -> Optional[int]:
+        """
+        Получает выбранное направление сортировки из SearchFormData.
+        
+        :return: Значение направления сортировки (1 или 2) или None, если форма не загружена.
+        """
+        form_data = self._get_search_form_cache()
+        if form_data and form_data.sort_directions:
+            for direction in form_data.sort_directions:
+                if direction.is_selected:
+                    return direction.value
+            if form_data.sort_directions:
+                for direction in form_data.sort_directions:
+                    if direction.value == 2:
+                        return 2
+                return form_data.sort_directions[0].value
+        return None
+    
+    def _extract_search_id(self, html_content: str) -> Optional[str]:
+        """
+        Извлекает search_id из HTML контента.
+        
+        :param html_content: HTML контент страницы с результатами поиска.
+        :return: search_id или None, если не найден.
+        """
+        return self.parser.extract_search_id(html_content)
+    
+    def _build_search_form_params(
+        self,
+        title: str,
+        forum_ids: Optional[List[int]] = None,
+        sort_option: Optional[int] = None,
+        sort_direction: Optional[int] = None,
+        time_filter: Optional[int] = None,
+    ) -> List[tuple]:
+        """
+        Формирует параметры для POST запроса поиска через форму.
+        Использует значения по умолчанию из SearchFormData, если параметры не указаны.
+        
+        :param title: Заголовок для поиска.
+        :param forum_ids: Список ID форумов (по умолчанию [-1] - все имеющиеся).
+        :param sort_option: Опция сортировки (если не указана, используется из формы).
+        :param sort_direction: Направление сортировки (если не указано, используется из формы).
+        :param time_filter: Фильтр по времени (опционально).
+        :return: Список кортежей (key, value) для POST запроса.
+        """
+        if sort_option is None:
+            sort_option = self._get_default_sort_option()
+        
+        if sort_direction is None:
+            sort_direction = self._get_default_sort_direction()
+        
+        return build_search_form_params(
+            title=title,
+            forum_ids=forum_ids,
+            sort_option=sort_option,
+            sort_direction=sort_direction,
+            time_filter=time_filter,
+        )
+    
+    def _build_search_pagination_params(
+        self,
+        title: str,
+        search_id: str,
+        page: int,
+    ) -> dict:
+        """
+        Формирует параметры для GET запроса пагинации поиска.
+        
+        :param title: Заголовок для поиска.
+        :param search_id: ID поиска, полученный из первого POST запроса.
+        :param page: Номер страницы (начинается с 1).
+        :return: Словарь с параметрами запроса.
+        """
+        return build_search_pagination_params(
+            title=title,
+            search_id=search_id,
+            page=page,
+            page_size=SEARCH_PAGE_SIZE,
+        )

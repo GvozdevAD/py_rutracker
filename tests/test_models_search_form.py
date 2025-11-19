@@ -174,4 +174,230 @@ class TestSearchFormData:
         assert len(form_data.sort_directions) == 0
         assert len(form_data.time_filter_options) == 0
         assert form_data.forum_field_name == "f[]"
-
+    
+    def test_get_sort_option_by_name(self):
+        """Тест поиска опции сортировки по названию."""
+        sort_options = [
+            SortOption(value=10, name="По дате добавления"),
+            SortOption(value=7, name="По размеру"),
+            SortOption(value=8, name="По количеству скачиваний")
+        ]
+        form_data = SearchFormData(sort_options=sort_options)
+        
+        option = form_data.get_sort_option_by_name("дате")
+        assert option is not None
+        assert option.value == 10
+        
+        option = form_data.get_sort_option_by_name("размеру")
+        assert option is not None
+        assert option.value == 7
+        
+        option = form_data.get_sort_option_by_name("скачиваний")
+        assert option is not None
+        assert option.value == 8
+        
+        option = form_data.get_sort_option_by_name("несуществующая")
+        assert option is None
+    
+    def test_get_sort_option_by_value(self):
+        """Тест поиска опции сортировки по значению."""
+        sort_options = [
+            SortOption(value=10, name="По дате"),
+            SortOption(value=7, name="По размеру")
+        ]
+        form_data = SearchFormData(sort_options=sort_options)
+        
+        option = form_data.get_sort_option_by_value(10)
+        assert option is not None
+        assert option.name == "По дате"
+        
+        option = form_data.get_sort_option_by_value(999)
+        assert option is None
+    
+    def test_get_sort_direction_by_name(self):
+        """Тест поиска направления сортировки по названию."""
+        sort_directions = [
+            SortDirection(value=1, name="По возрастанию"),
+            SortDirection(value=2, name="По убыванию")
+        ]
+        form_data = SearchFormData(sort_directions=sort_directions)
+        
+        direction = form_data.get_sort_direction_by_name("возрастанию")
+        assert direction is not None
+        assert direction.value == 1
+        
+        direction = form_data.get_sort_direction_by_name("убыванию")
+        assert direction is not None
+        assert direction.value == 2
+        
+        direction = form_data.get_sort_direction_by_name("несуществующее")
+        assert direction is None
+    
+    def test_get_time_filter_by_name(self):
+        """Тест поиска фильтра по времени по названию."""
+        time_filters = [
+            TimeFilterOption(value=0, name="За все время"),
+            TimeFilterOption(value=7, name="За последние 7 дней"),
+            TimeFilterOption(value=30, name="За последние 30 дней")
+        ]
+        form_data = SearchFormData(time_filter_options=time_filters)
+        
+        time_filter = form_data.get_time_filter_by_name("7 дней")
+        assert time_filter is not None
+        assert time_filter.value == 7
+        
+        time_filter = form_data.get_time_filter_by_name("30 дней")
+        assert time_filter is not None
+        assert time_filter.value == 30
+        
+        time_filter = form_data.get_time_filter_by_name("несуществующий")
+        assert time_filter is None
+    
+    def test_get_time_filter_by_value(self):
+        """Тест поиска фильтра по времени по значению."""
+        time_filters = [
+            TimeFilterOption(value=7, name="За последние 7 дней"),
+            TimeFilterOption(value=30, name="За последние 30 дней")
+        ]
+        form_data = SearchFormData(time_filter_options=time_filters)
+        
+        time_filter = form_data.get_time_filter_by_value(7)
+        assert time_filter is not None
+        assert time_filter.name == "За последние 7 дней"
+        
+        time_filter = form_data.get_time_filter_by_value(999)
+        assert time_filter is None
+    
+    def test_get_forum_ids_by_name(self):
+        """Тест поиска ID форумов по названию."""
+        forum_groups = [
+            ForumGroup(name="Фильмы", sections=[
+                ForumSection(id=1, name="Фильмы HD"),
+                ForumSection(id=2, name="Фильмы SD")
+            ]),
+            ForumGroup(name="Музыка", sections=[
+                ForumSection(id=10, name="Музыка Lossless"),
+                ForumSection(id=11, name="Музыка MP3")
+            ])
+        ]
+        form_data = SearchFormData(forum_groups=forum_groups)
+        
+        forum_ids = form_data.get_forum_ids_by_name("HD")
+        assert len(forum_ids) == 1
+        assert 1 in forum_ids
+        
+        forum_ids = form_data.get_forum_ids_by_name("Фильмы")
+        assert len(forum_ids) == 2
+        assert 1 in forum_ids
+        assert 2 in forum_ids
+        
+        forum_ids = form_data.get_forum_ids_by_name("музыка")
+        assert len(forum_ids) == 2
+        assert 10 in forum_ids
+        assert 11 in forum_ids
+        
+        forum_ids = form_data.get_forum_ids_by_name("несуществующий")
+        assert len(forum_ids) == 0
+    
+    def test_get_forum_ids_by_group_name(self):
+        """Тест поиска ID форумов по названию группы."""
+        forum_groups = [
+            ForumGroup(name="Фильмы", sections=[
+                ForumSection(id=1, name="Фильмы HD"),
+                ForumSection(id=2, name="Фильмы SD")
+            ]),
+            ForumGroup(name="Музыка", sections=[
+                ForumSection(id=10, name="Музыка Lossless"),
+                ForumSection(id=11, name="Музыка MP3")
+            ])
+        ]
+        form_data = SearchFormData(forum_groups=forum_groups)
+        
+        forum_ids = form_data.get_forum_ids_by_group_name("Фильмы")
+        assert len(forum_ids) == 2
+        assert 1 in forum_ids
+        assert 2 in forum_ids
+        
+        forum_ids = form_data.get_forum_ids_by_group_name("музыка")
+        assert len(forum_ids) == 2
+        assert 10 in forum_ids
+        assert 11 in forum_ids
+        
+        forum_ids = form_data.get_forum_ids_by_group_name("Фильм")
+        assert len(forum_ids) == 2
+        
+        forum_ids = form_data.get_forum_ids_by_group_name("несуществующая")
+        assert len(forum_ids) == 0
+    
+    def test_default_sort_option(self):
+        """Тест получения опции сортировки по умолчанию."""
+        sort_options = [
+            SortOption(value=1, name="По дате", is_selected=False),
+            SortOption(value=10, name="По дате добавления", is_selected=True),
+            SortOption(value=7, name="По размеру", is_selected=False)
+        ]
+        form_data = SearchFormData(sort_options=sort_options)
+        
+        default_option = form_data.default_sort_option
+        assert default_option is not None
+        assert default_option.value == 10
+        assert default_option.is_selected is True
+    
+    def test_default_sort_option_none(self):
+        """Тест получения опции сортировки по умолчанию, когда ничего не выбрано."""
+        sort_options = [
+            SortOption(value=1, name="По дате", is_selected=False),
+            SortOption(value=10, name="По дате добавления", is_selected=False)
+        ]
+        form_data = SearchFormData(sort_options=sort_options)
+        
+        default_option = form_data.default_sort_option
+        assert default_option is None
+    
+    def test_default_sort_direction(self):
+        """Тест получения направления сортировки по умолчанию."""
+        sort_directions = [
+            SortDirection(value=1, name="По возрастанию", is_selected=False),
+            SortDirection(value=2, name="По убыванию", is_selected=True)
+        ]
+        form_data = SearchFormData(sort_directions=sort_directions)
+        
+        default_direction = form_data.default_sort_direction
+        assert default_direction is not None
+        assert default_direction.value == 2
+        assert default_direction.is_selected is True
+    
+    def test_default_sort_direction_none(self):
+        """Тест получения направления сортировки по умолчанию, когда ничего не выбрано."""
+        sort_directions = [
+            SortDirection(value=1, name="По возрастанию", is_selected=False),
+            SortDirection(value=2, name="По убыванию", is_selected=False)
+        ]
+        form_data = SearchFormData(sort_directions=sort_directions)
+        
+        default_direction = form_data.default_sort_direction
+        assert default_direction is None
+    
+    def test_default_time_filter(self):
+        """Тест получения фильтра по времени по умолчанию."""
+        time_filters = [
+            TimeFilterOption(value=0, name="За все время", is_selected=False),
+            TimeFilterOption(value=7, name="За последние 7 дней", is_selected=True)
+        ]
+        form_data = SearchFormData(time_filter_options=time_filters)
+        
+        default_filter = form_data.default_time_filter
+        assert default_filter is not None
+        assert default_filter.value == 7
+        assert default_filter.is_selected is True
+    
+    def test_default_time_filter_none(self):
+        """Тест получения фильтра по времени по умолчанию, когда ничего не выбрано."""
+        time_filters = [
+            TimeFilterOption(value=0, name="За все время", is_selected=False),
+            TimeFilterOption(value=7, name="За последние 7 дней", is_selected=False)
+        ]
+        form_data = SearchFormData(time_filter_options=time_filters)
+        
+        default_filter = form_data.default_time_filter
+        assert default_filter is None

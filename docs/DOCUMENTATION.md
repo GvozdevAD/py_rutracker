@@ -7,6 +7,10 @@
 - [RuTrackerClient (Синхронный клиент)](#rutrackerclient-синхронный-клиент)
   - [Инициализация](#инициализация)
   - [Поиск](#поиск)
+    - [search() - простой поиск](#search---простой-поиск)
+    - [search_all_pages() - поиск на всех страницах](#search_all_pages---поиск-на-всех-страницах)
+    - [search_with_form() - поиск через форму](#search_with_form---поиск-через-форму)
+    - [search_all_pages_with_form() - поиск по всем страницам через форму](#search_all_pages_with_form---поиск-по-всем-страницам-через-форму)
   - [Работа с торрентами](#работа-с-торрентами)
   - [Форма поиска](#форма-поиска)
   - [Аутентификация](#аутентификация)
@@ -61,9 +65,27 @@ client = RuTrackerClient("your_login", "your_password", proxies)
 
 ### Поиск
 
+Библиотека предоставляет два способа поиска:
+
+1. **Простой поиск** (`search()`, `search_all_pages()`) - использует GET запросы, работает как раньше, поддерживает только базовые параметры (`title`, `page`).
+2. **Поиск через форму** (`search_with_form()`, `search_all_pages_with_form()`) - использует POST запрос для первой страницы и GET с `search_id` для последующих, поддерживает расширенные параметры (сортировка, фильтры по форумам и времени).
+
+**Когда использовать поиск через форму:**
+- Нужна сортировка результатов (по дате, размеру, количеству скачиваний и т.д.)
+- Нужна фильтрация по конкретным форумам
+- Нужна фильтрация по времени (за последние 7 дней, месяц и т.д.)
+- Нужен более точный контроль над параметрами поиска
+
+**Когда использовать простой поиск:**
+- Нужен быстрый поиск без дополнительных параметров
+- Совместимость со старым кодом
+- Простые задачи поиска
+
+#### `search()` - простой поиск
+
 #### `search(title: str, page: int = 1, return_search_dict: bool = False) -> list[SearchResult | dict]`
 
-Выполняет поиск по заданному заголовку и возвращает результаты.
+Выполняет поиск по заданному заголовку и возвращает результаты. Использует GET запросы.
 
 **Параметры:**
 - `title` (str): Заголовок для поиска.
@@ -89,9 +111,11 @@ for result in results:
     print(f"{result.title} - {result.size} {result.unit}")
 ```
 
+#### `search_all_pages()` - поиск на всех страницах
+
 #### `search_all_pages(title: str, return_search_dict: bool = False, max_pages: Optional[int] = None) -> list[SearchResult | dict]`
 
-Выполняет поиск по заданному заголовку на всех страницах.
+Выполняет поиск по заданному заголовку на всех страницах. Использует GET запросы.
 
 **Параметры:**
 - `title` (str): Заголовок для поиска.
@@ -111,6 +135,88 @@ all_results = client.search_all_pages("Static-X")
 
 # Поиск с ограничением количества страниц
 limited_results = client.search_all_pages("Static-X", max_pages=5)
+
+print(f"Найдено результатов: {len(all_results)}")
+```
+
+#### `search_with_form()` - поиск через форму
+
+#### `search_with_form(title: str, page: int = 1, return_search_dict: bool = False, forum_ids: Optional[List[int]] = None, sort_option: Optional[int] = None, sort_direction: Optional[int] = None, time_filter: Optional[int] = None) -> list[SearchResult | dict]`
+
+Выполняет поиск через форму с параметрами сортировки и фильтрации. Использует POST запрос для первой страницы и GET запрос с `search_id` для последующих страниц.
+
+**Параметры:**
+- `title` (str): Заголовок для поиска.
+- `page` (int): Номер страницы для поиска (по умолчанию 1).
+- `return_search_dict` (bool): Флаг, указывающий, следует ли возвращать результаты в виде словарей (если `True`) или объектов `SearchResult` (если `False`).
+- `forum_ids` (Optional[List[int]]): Список ID форумов (по умолчанию `[-1]` - все имеющиеся).
+- `sort_option` (Optional[int]): Опция сортировки (если не указана, используется из формы).
+- `sort_direction` (Optional[int]): Направление сортировки (1 - возрастание, 2 - убывание, если не указано, используется из формы).
+- `time_filter` (Optional[int]): Фильтр по времени (опционально).
+
+**Возвращает:**
+- `list[SearchResult | dict]`: Список результатов поиска.
+
+**Исключения:**
+- `RuTrackerValidationError`: Если параметры не проходят валидацию.
+- `RuTrackerRequestError`: Если происходит ошибка при выполнении запроса.
+- `RuTrackerParsingError`: Если происходит ошибка при парсинге результатов поиска.
+
+**Пример:**
+```python
+# Простой поиск через форму (используются значения по умолчанию из формы)
+results = client.search_with_form("Static-X")
+
+# Поиск с сортировкой по дате (по убыванию)
+results = client.search_with_form(
+    "Static-X",
+    sort_option=10,  # По дате
+    sort_direction=2  # По убыванию
+)
+
+# Поиск в конкретных форумах с фильтром по времени
+results = client.search_with_form(
+    "Static-X",
+    forum_ids=[1950, 1951],  # Музыкальные форумы
+    time_filter=7  # За последние 7 дней
+)
+
+for result in results:
+    print(f"{result.title} - {result.size} {result.unit}")
+```
+
+**Примечание:** Метод автоматически извлекает `search_id` из ответа первого POST запроса и использует его для пагинации. `search_id` кешируется для оптимизации повторных запросов с теми же параметрами.
+
+#### `search_all_pages_with_form()` - поиск по всем страницам через форму
+
+#### `search_all_pages_with_form(title: str, return_search_dict: bool = False, max_pages: Optional[int] = None, forum_ids: Optional[List[int]] = None, sort_option: Optional[int] = None, sort_direction: Optional[int] = None, time_filter: Optional[int] = None) -> list[SearchResult | dict]`
+
+Выполняет поиск через форму по заданному заголовку на всех страницах. Автоматически использует POST для первой страницы и GET с `search_id` для остальных.
+
+**Параметры:**
+- `title` (str): Заголовок для поиска.
+- `return_search_dict` (bool): Флаг, указывающий, следует ли возвращать результаты в виде словарей (если `True`) или объектов `SearchResult` (если `False`).
+- `max_pages` (Optional[int]): Максимальное количество страниц для поиска (по умолчанию 10). Если `None`, используется значение из констант.
+- `forum_ids` (Optional[List[int]]): Список ID форумов (по умолчанию `[-1]` - все имеющиеся).
+- `sort_option` (Optional[int]): Опция сортировки (если не указана, используется из формы).
+- `sort_direction` (Optional[int]): Направление сортировки (1 - возрастание, 2 - убывание, если не указано, используется из формы).
+- `time_filter` (Optional[int]): Фильтр по времени (опционально).
+
+**Возвращает:**
+- `list[SearchResult | dict]`: Список всех результатов поиска со всех страниц.
+
+**Исключения:**
+- `RuTrackerParsingError`: Если происходит ошибка при парсинге результатов поиска.
+
+**Пример:**
+```python
+# Поиск по всем страницам через форму с сортировкой
+all_results = client.search_all_pages_with_form(
+    "Static-X",
+    max_pages=10,
+    sort_option=10,
+    sort_direction=2
+)
 
 print(f"Найдено результатов: {len(all_results)}")
 ```
@@ -215,6 +321,45 @@ for option in form_data.sort_options:
 form_data = client.get_search_form(force_refresh=True)
 ```
 
+#### Вспомогательные методы SearchFormData
+
+Класс `SearchFormData` предоставляет удобные методы для поиска значений по названию без необходимости проходить по спискам вручную:
+
+**Методы поиска:**
+
+- `get_sort_option_by_name(name: str) -> Optional[SortOption]` - Находит опцию сортировки по названию (частичное совпадение, регистронезависимо).
+- `get_sort_option_by_value(value: int) -> Optional[SortOption]` - Находит опцию сортировки по значению.
+- `get_sort_direction_by_name(name: str) -> Optional[SortDirection]` - Находит направление сортировки по названию (частичное совпадение, регистронезависимо).
+- `get_time_filter_by_name(name: str) -> Optional[TimeFilterOption]` - Находит фильтр по времени по названию (частичное совпадение, регистронезависимо).
+- `get_time_filter_by_value(value: int) -> Optional[TimeFilterOption]` - Находит фильтр по времени по значению.
+- `get_forum_ids_by_name(name: str) -> List[int]` - Находит ID форумов по названию раздела (частичное совпадение, регистронезависимо). Может вернуть несколько ID.
+- `get_forum_ids_by_group_name(group_name: str) -> List[int]` - Находит ID всех форумов в группе по названию группы (частичное совпадение, регистронезависимо).
+
+**Свойства для значений по умолчанию:**
+
+- `default_sort_option: Optional[SortOption]` - Возвращает выбранную опцию сортировки по умолчанию.
+- `default_sort_direction: Optional[SortDirection]` - Возвращает выбранное направление сортировки по умолчанию.
+- `default_time_filter: Optional[TimeFilterOption]` - Возвращает выбранный фильтр по времени по умолчанию.
+
+**Пример использования:**
+```python
+form_data = client.get_search_form()
+
+# Поиск опции сортировки по названию
+sort_option = form_data.get_sort_option_by_name("дате")
+if sort_option:
+    results = client.search_with_form("Static-X", sort_option=sort_option.value)
+
+# Поиск форумов по названию группы
+music_forums = form_data.get_forum_ids_by_group_name("Музыка")
+if music_forums:
+    results = client.search_with_form("Static-X", forum_ids=music_forums)
+
+# Использование значений по умолчанию
+if form_data.default_sort_option:
+    print(f"Сортировка по умолчанию: {form_data.default_sort_option.name}")
+```
+
 ---
 
 ### Аутентификация
@@ -292,9 +437,11 @@ results = await client.search("query")
 
 ### Поиск
 
+#### `search()` - простой поиск
+
 #### `async search(title: str, page: int = 1, return_search_dict: bool = False) -> list[SearchResult | dict]`
 
-Асинхронно выполняет поиск по заданному заголовку и возвращает результаты.
+Асинхронно выполняет поиск по заданному заголовку и возвращает результаты. Использует GET запросы.
 
 **Параметры:**
 - `title` (str): Заголовок для поиска.
@@ -316,9 +463,11 @@ async with AsyncRuTrackerClient("login", "password") as client:
         print(f"{result.title} - {result.size} {result.unit}")
 ```
 
+#### `search_all_pages()` - поиск на всех страницах
+
 #### `async search_all_pages(title: str, return_search_dict: bool = False, max_pages: Optional[int] = None) -> list[SearchResult | dict]`
 
-Асинхронно выполняет поиск по заданному заголовку на всех страницах. Запросы к разным страницам выполняются параллельно.
+Асинхронно выполняет поиск по заданному заголовку на всех страницах. Запросы к разным страницам выполняются параллельно. Использует GET запросы.
 
 **Параметры:**
 - `title` (str): Заголовок для поиска.
@@ -336,6 +485,76 @@ async with AsyncRuTrackerClient("login", "password") as client:
 async with AsyncRuTrackerClient("login", "password") as client:
     # Параллельный поиск на всех страницах
     all_results = await client.search_all_pages("Static-X", max_pages=5)
+    print(f"Найдено результатов: {len(all_results)}")
+```
+
+#### `search_with_form()` - поиск через форму
+
+#### `async search_with_form(title: str, page: int = 1, return_search_dict: bool = False, forum_ids: Optional[List[int]] = None, sort_option: Optional[int] = None, sort_direction: Optional[int] = None, time_filter: Optional[int] = None) -> list[SearchResult | dict]`
+
+Асинхронно выполняет поиск через форму с параметрами сортировки и фильтрации. Использует POST запрос для первой страницы и GET запрос с `search_id` для последующих страниц.
+
+**Параметры:**
+- `title` (str): Заголовок для поиска.
+- `page` (int): Номер страницы для поиска (по умолчанию 1).
+- `return_search_dict` (bool): Флаг, указывающий, следует ли возвращать результаты в виде словарей (если `True`) или объектов `SearchResult` (если `False`).
+- `forum_ids` (Optional[List[int]]): Список ID форумов (по умолчанию `[-1]` - все имеющиеся).
+- `sort_option` (Optional[int]): Опция сортировки (если не указана, используется из формы).
+- `sort_direction` (Optional[int]): Направление сортировки (1 - возрастание, 2 - убывание, если не указано, используется из формы).
+- `time_filter` (Optional[int]): Фильтр по времени (опционально).
+
+**Возвращает:**
+- `list[SearchResult | dict]`: Список результатов поиска.
+
+**Исключения:**
+- `RuTrackerValidationError`: Если параметры не проходят валидацию.
+- `RuTrackerRequestError`: Если происходит ошибка при выполнении запроса.
+- `RuTrackerParsingError`: Если происходит ошибка при парсинге результатов поиска.
+
+**Пример:**
+```python
+async with AsyncRuTrackerClient("login", "password") as client:
+    # Поиск с сортировкой по дате (по убыванию)
+    results = await client.search_with_form(
+        "Static-X",
+        sort_option=10,
+        sort_direction=2
+    )
+    
+    for result in results:
+        print(f"{result.title} - {result.size} {result.unit}")
+```
+
+#### `search_all_pages_with_form()` - поиск по всем страницам через форму
+
+#### `async search_all_pages_with_form(title: str, return_search_dict: bool = False, max_pages: Optional[int] = None, forum_ids: Optional[List[int]] = None, sort_option: Optional[int] = None, sort_direction: Optional[int] = None, time_filter: Optional[int] = None) -> list[SearchResult | dict]`
+
+Асинхронно выполняет поиск через форму по заданному заголовку на всех страницах. Автоматически использует POST для первой страницы и GET с `search_id` для остальных.
+
+**Параметры:**
+- `title` (str): Заголовок для поиска.
+- `return_search_dict` (bool): Флаг, указывающий, следует ли возвращать результаты в виде словарей (если `True`) или объектов `SearchResult` (если `False`).
+- `max_pages` (Optional[int]): Максимальное количество страниц для поиска (по умолчанию 10). Если `None`, используется значение из констант.
+- `forum_ids` (Optional[List[int]]): Список ID форумов (по умолчанию `[-1]` - все имеющиеся).
+- `sort_option` (Optional[int]): Опция сортировки (если не указана, используется из формы).
+- `sort_direction` (Optional[int]): Направление сортировки (1 - возрастание, 2 - убывание, если не указано, используется из формы).
+- `time_filter` (Optional[int]): Фильтр по времени (опционально).
+
+**Возвращает:**
+- `list[SearchResult | dict]`: Список всех результатов поиска со всех страниц.
+
+**Исключения:**
+- `RuTrackerParsingError`: Если происходит ошибка при парсинге результатов поиска.
+
+**Пример:**
+```python
+async with AsyncRuTrackerClient("login", "password") as client:
+    all_results = await client.search_all_pages_with_form(
+        "Static-X",
+        max_pages=10,
+        sort_option=10,
+        sort_direction=2
+    )
     print(f"Найдено результатов: {len(all_results)}")
 ```
 

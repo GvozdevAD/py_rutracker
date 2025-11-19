@@ -7,6 +7,10 @@ Complete documentation for using the Py_RuTracker library.
 - [RuTrackerClient (Synchronous Client)](#rutrackerclient-synchronous-client)
   - [Initialization](#initialization)
   - [Search](#search)
+    - [search() - simple search](#search---simple-search)
+    - [search_all_pages() - search on all pages](#search_all_pages---search-on-all-pages)
+    - [search_with_form() - search via form](#search_with_form---search-via-form)
+    - [search_all_pages_with_form() - search all pages via form](#search_all_pages_with_form---search-all-pages-via-form)
   - [Working with Torrents](#working-with-torrents)
   - [Search Form](#search-form)
   - [Authentication](#authentication)
@@ -14,6 +18,10 @@ Complete documentation for using the Py_RuTracker library.
 - [AsyncRuTrackerClient (Asynchronous Client)](#asyncrutrackerclient-asynchronous-client)
   - [Initialization](#initialization-1)
   - [Search](#search-1)
+    - [search() - simple search](#search---simple-search-1)
+    - [search_all_pages() - search on all pages](#search_all_pages---search-on-all-pages-1)
+    - [search_with_form() - search via form](#search_with_form---search-via-form-1)
+    - [search_all_pages_with_form() - search all pages via form](#search_all_pages_with_form---search-all-pages-via-form-1)
   - [Working with Torrents](#working-with-torrents-1)
   - [Search Form](#search-form-1)
   - [Authentication](#authentication-1)
@@ -61,9 +69,27 @@ client = RuTrackerClient("your_login", "your_password", proxies)
 
 ### Search
 
+The library provides two ways to search:
+
+1. **Simple search** (`search()`, `search_all_pages()`) - uses GET requests, works as before, supports only basic parameters (`title`, `page`).
+2. **Form-based search** (`search_with_form()`, `search_all_pages_with_form()`) - uses POST request for the first page and GET with `search_id` for subsequent pages, supports advanced parameters (sorting, forum and time filters).
+
+**When to use form-based search:**
+- Need to sort results (by date, size, download count, etc.)
+- Need to filter by specific forums
+- Need to filter by time (last 7 days, month, etc.)
+- Need more precise control over search parameters
+
+**When to use simple search:**
+- Need quick search without additional parameters
+- Compatibility with old code
+- Simple search tasks
+
+#### `search()` - simple search
+
 #### `search(title: str, page: int = 1, return_search_dict: bool = False) -> list[SearchResult | dict]`
 
-Performs a search by the given title and returns results.
+Performs a search by the given title and returns results. Uses GET requests.
 
 **Parameters:**
 - `title` (str): Title to search for.
@@ -89,9 +115,11 @@ for result in results:
     print(f"{result.title} - {result.size} {result.unit}")
 ```
 
+#### `search_all_pages()` - search on all pages
+
 #### `search_all_pages(title: str, return_search_dict: bool = False, max_pages: Optional[int] = None) -> list[SearchResult | dict]`
 
-Performs a search by the given title on all pages.
+Performs a search by the given title on all pages. Uses GET requests.
 
 **Parameters:**
 - `title` (str): Title to search for.
@@ -292,9 +320,11 @@ results = await client.search("query")
 
 ### Search
 
+#### `search()` - simple search
+
 #### `async search(title: str, page: int = 1, return_search_dict: bool = False) -> list[SearchResult | dict]`
 
-Asynchronously performs a search by the given title and returns results.
+Asynchronously performs a search by the given title and returns results. Uses GET requests.
 
 **Parameters:**
 - `title` (str): Title to search for.
@@ -316,9 +346,11 @@ async with AsyncRuTrackerClient("login", "password") as client:
         print(f"{result.title} - {result.size} {result.unit}")
 ```
 
+#### `search_all_pages()` - search on all pages
+
 #### `async search_all_pages(title: str, return_search_dict: bool = False, max_pages: Optional[int] = None) -> list[SearchResult | dict]`
 
-Asynchronously performs a search by the given title on all pages. Requests to different pages are executed in parallel.
+Asynchronously performs a search by the given title on all pages. Requests to different pages are executed in parallel. Uses GET requests.
 
 **Parameters:**
 - `title` (str): Title to search for.
@@ -336,6 +368,78 @@ Asynchronously performs a search by the given title on all pages. Requests to di
 async with AsyncRuTrackerClient("login", "password") as client:
     # Parallel search on all pages
     all_results = await client.search_all_pages("Static-X", max_pages=5)
+    print(f"Found results: {len(all_results)}")
+```
+
+#### `search_with_form()` - search via form
+
+#### `async search_with_form(title: str, page: int = 1, return_search_dict: bool = False, forum_ids: Optional[List[int]] = None, sort_option: Optional[int] = None, sort_direction: Optional[int] = None, time_filter: Optional[int] = None) -> list[SearchResult | dict]`
+
+Asynchronously performs a search via form with sorting and filtering parameters. Uses POST request for the first page and GET request with `search_id` for subsequent pages.
+
+**Parameters:**
+- `title` (str): Title to search for.
+- `page` (int): Page number for search (default is 1).
+- `return_search_dict` (bool): Flag indicating whether to return results as dictionaries (if `True`) or `SearchResult` objects (if `False`).
+- `forum_ids` (Optional[List[int]]): List of forum IDs (default is `[-1]` - all available).
+- `sort_option` (Optional[int]): Sort option (if not specified, uses value from form).
+- `sort_direction` (Optional[int]): Sort direction (1 - ascending, 2 - descending, if not specified, uses value from form).
+- `time_filter` (Optional[int]): Time filter (optional).
+
+**Returns:**
+- `list[SearchResult | dict]`: List of search results.
+
+**Exceptions:**
+- `RuTrackerValidationError`: If parameters fail validation.
+- `RuTrackerRequestError`: If an error occurs while executing the request.
+- `RuTrackerParsingError`: If an error occurs while parsing search results.
+
+**Example:**
+```python
+async with AsyncRuTrackerClient("login", "password") as client:
+    # Search with sorting by date (descending)
+    results = await client.search_with_form(
+        "Static-X",
+        sort_option=10,
+        sort_direction=2
+    )
+    
+    for result in results:
+        print(f"{result.title} - {result.size} {result.unit}")
+```
+
+**Note:** The method automatically extracts `search_id` from the first POST request response and uses it for pagination. `search_id` is cached for optimization of repeated requests with the same parameters.
+
+#### `search_all_pages_with_form()` - search all pages via form
+
+#### `async search_all_pages_with_form(title: str, return_search_dict: bool = False, max_pages: Optional[int] = None, forum_ids: Optional[List[int]] = None, sort_option: Optional[int] = None, sort_direction: Optional[int] = None, time_filter: Optional[int] = None) -> list[SearchResult | dict]`
+
+Asynchronously performs a search via form by the given title on all pages. Automatically uses POST for the first page and GET with `search_id` for the rest.
+
+**Parameters:**
+- `title` (str): Title to search for.
+- `return_search_dict` (bool): Flag indicating whether to return results as dictionaries (if `True`) or `SearchResult` objects (if `False`).
+- `max_pages` (Optional[int]): Maximum number of pages to search (default is 10). If `None`, the value from constants is used.
+- `forum_ids` (Optional[List[int]]): List of forum IDs (default is `[-1]` - all available).
+- `sort_option` (Optional[int]): Sort option (if not specified, uses value from form).
+- `sort_direction` (Optional[int]): Sort direction (1 - ascending, 2 - descending, if not specified, uses value from form).
+- `time_filter` (Optional[int]): Time filter (optional).
+
+**Returns:**
+- `list[SearchResult | dict]`: List of all search results from all pages.
+
+**Exceptions:**
+- `RuTrackerParsingError`: If an error occurs while parsing search results.
+
+**Example:**
+```python
+async with AsyncRuTrackerClient("login", "password") as client:
+    all_results = await client.search_all_pages_with_form(
+        "Static-X",
+        max_pages=10,
+        sort_option=10,
+        sort_direction=2
+    )
     print(f"Found results: {len(all_results)}")
 ```
 
@@ -424,6 +528,45 @@ async with AsyncRuTrackerClient("login", "password") as client:
     
     # Force refresh
     form_data = await client.get_search_form(force_refresh=True)
+```
+
+#### SearchFormData Helper Methods
+
+The `SearchFormData` class provides convenient methods for finding values by name without manually iterating through lists:
+
+**Search Methods:**
+
+- `get_sort_option_by_name(name: str) -> Optional[SortOption]` - Finds a sort option by name (partial match, case-insensitive).
+- `get_sort_option_by_value(value: int) -> Optional[SortOption]` - Finds a sort option by value.
+- `get_sort_direction_by_name(name: str) -> Optional[SortDirection]` - Finds a sort direction by name (partial match, case-insensitive).
+- `get_time_filter_by_name(name: str) -> Optional[TimeFilterOption]` - Finds a time filter by name (partial match, case-insensitive).
+- `get_time_filter_by_value(value: int) -> Optional[TimeFilterOption]` - Finds a time filter by value.
+- `get_forum_ids_by_name(name: str) -> List[int]` - Finds forum IDs by section name (partial match, case-insensitive). May return multiple IDs.
+- `get_forum_ids_by_group_name(group_name: str) -> List[int]` - Finds all forum IDs in a group by group name (partial match, case-insensitive).
+
+**Default Value Properties:**
+
+- `default_sort_option: Optional[SortOption]` - Returns the default selected sort option.
+- `default_sort_direction: Optional[SortDirection]` - Returns the default selected sort direction.
+- `default_time_filter: Optional[TimeFilterOption]` - Returns the default selected time filter.
+
+**Usage Example:**
+```python
+form_data = await client.get_search_form()
+
+# Find sort option by name
+sort_option = form_data.get_sort_option_by_name("date")
+if sort_option:
+    results = await client.search_with_form("Static-X", sort_option=sort_option.value)
+
+# Find forums by group name
+music_forums = form_data.get_forum_ids_by_group_name("Music")
+if music_forums:
+    results = await client.search_with_form("Static-X", forum_ids=music_forums)
+
+# Use default values
+if form_data.default_sort_option:
+    print(f"Default sort: {form_data.default_sort_option.name}")
 ```
 
 ---

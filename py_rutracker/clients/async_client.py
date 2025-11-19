@@ -1,7 +1,7 @@
 import asyncio
 import ssl
 from pathlib import Path
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 import aiohttp
 import certifi
@@ -45,6 +45,7 @@ class AsyncRuTrackerClient(BaseRuTrackerClient):
         self.user_agent = user_agent or DEFAULT_USER_AGENT
         self.session = None
         self._ssl_context = ssl.create_default_context(cafile=certifi.where())
+        self._search_id_cache: dict = {}
 
     async def init(self) -> aiohttp.ClientSession:
         """
@@ -78,6 +79,59 @@ class AsyncRuTrackerClient(BaseRuTrackerClient):
                 f"Ошибка при выполнении запроса: {ex.message}",
                 url=auth_url,
                 status_code=ex.status_code
+            ) from ex
+    
+    @async_retry_on_network_error(max_attempts=3, min_wait=2.0, max_wait=10.0)
+    async def _send_post_request(self, url: str, data: list) -> str:
+        """
+        Отправляет POST-запрос с поддержкой retry и возвращает текст ответа.
+        
+        :param url: URL для отправки запроса.
+        :param data: Данные для POST-запроса в виде списка кортежей (key, value).
+        :return: Текст ответа от сервера.
+        :raises RuTrackerRequestError: При ошибках запроса.
+        """
+        logger.debug(f"Отправка POST-запроса: url={url}, data={data}")
+        try:
+            form_data = aiohttp.FormData(data)
+            async with self.session.post(
+                url, data=form_data, ssl=self._ssl_context, proxy=self.proxy, timeout=aiohttp.ClientTimeout(total=30)
+            ) as response:
+                if response.status != 200:
+                    logger.warning(f"Получен неожиданный статус-код: {response.status}")
+                    error = RuTrackerRequestError(
+                        f"Ошибка запроса: статус-код {response.status}",
+                        url=url,
+                        status_code=response.status
+                    )
+                    if 500 <= response.status < 600:
+                        raise error
+                    raise error
+
+                content = await response.text()
+                
+                if "top-login-box" in content:
+                    logger.warning("Обнаружена необходимость аутентификации")
+                    raise RuTrackerRequestError(
+                        "Необходима аутентификация.",
+                        url=url,
+                        status_code=response.status
+                    )
+                
+                return content
+        except Exception as ex:
+            ex_type_name = type(ex).__name__
+            is_network_error = ('ClientError' in ex_type_name or 
+                              'ClientConnectionError' in ex_type_name or 
+                              'ClientTimeout' in ex_type_name)
+            
+            if is_network_error:
+                logger.warning(f"Сетевая ошибка при выполнении POST-запроса: {ex}")
+            else:
+                logger.exception("Неожиданная ошибка при выполнении POST-запроса")
+            raise RuTrackerRequestError(
+                f"Ошибка при выполнении запроса: {ex}",
+                url=url
             ) from ex
     
     @async_retry_on_network_error(max_attempts=3, min_wait=2.0, max_wait=10.0)
@@ -346,6 +400,205 @@ class AsyncRuTrackerClient(BaseRuTrackerClient):
 
         logger.info(f"Торрент успешно сохранен: {file_path}")
         return str(file_path)
+    
+    async def search_with_form(
+        self,
+        title: str,
+        page: int = 1,
+        return_search_dict: bool = False,
+        forum_ids: Optional[List[int]] = None,
+        sort_option: Optional[int] = None,
+        sort_direction: Optional[int] = None,
+        time_filter: Optional[int] = None,
+    ) -> list[Union[SearchResult, dict]]:
+        """
+        Выполняет поиск через форму с параметрами сортировки и фильтрации.
+        Использует POST запрос для первой страницы и GET запрос с search_id для последующих страниц.
+        
+        :param title: Заголовок для поиска.
+        :param page: Номер страницы для поиска (по умолчанию 1).
+        :param return_search_dict: Флаг, указывающий, следует ли возвращать результаты
+                                   в виде словарей (если True) или объектов SearchResult (если False).
+        :param forum_ids: Список ID форумов (по умолчанию [-1] - все имеющиеся).
+        :param sort_option: Опция сортировки (если не указана, используется из формы).
+        :param sort_direction: Направление сортировки (1 - возрастание, 2 - убывание, если не указано, используется из формы).
+        :param time_filter: Фильтр по времени (опционально).
+        :return: Список результатов поиска.
+        :raises RuTrackerValidationError: Если параметры не проходят валидацию.
+        :raises RuTrackerRequestError: Если происходит ошибка при выполнении запроса.
+        :raises RuTrackerParsingError: Если происходит ошибка при парсинге результатов поиска.
+        """
+        logger.debug(
+            f"Выполнение поиска через форму: title='{title}', page={page}, "
+            f"forum_ids={forum_ids}, sort_option={sort_option}, "
+            f"sort_direction={sort_direction}, time_filter={time_filter}"
+        )
+        
+        search_key = (
+            title,
+            tuple(sorted(forum_ids)) if forum_ids else None,
+            sort_option,
+            sort_direction,
+            time_filter,
+        )
+        
+        url = self._get_search_url()
+        
+        if page == 1:
+            data = self._build_search_form_params(
+                title=title,
+                forum_ids=forum_ids,
+                sort_option=sort_option,
+                sort_direction=sort_direction,
+                time_filter=time_filter,
+            )
+            
+            try:
+                content = await self._send_post_request(url, data)
+            except RuTrackerRequestError as ex:
+                if not hasattr(ex, 'url') or ex.url is None:
+                    ex.url = url
+                raise
+            
+            try:
+                results = self._parse_search_results(content, return_search_dict)
+                search_id = self._extract_search_id(content)
+                if search_id:
+                    self._search_id_cache[search_key] = search_id
+                    logger.debug(f"search_id сохранен в кеш: {search_id}")
+                else:
+                    logger.debug(f"search_id не найден на странице {page} (возможно, результаты помещаются на одну страницу)")
+                
+                logger.info(
+                    f"Поиск через форму завершен успешно: найдено {len(results)} результатов на странице {page}"
+                )
+                return results
+            except RuTrackerParsingError as ex:
+                logger.error(f"Ошибка парсинга результатов поиска: {ex}")
+                if not hasattr(ex, 'html_snippet') or ex.html_snippet is None:
+                    html_snippet = content[:200] if content else None
+                    if html_snippet:
+                        ex.html_snippet = html_snippet
+                raise
+        else:
+            search_id = self._search_id_cache.get(search_key)
+            
+            if not search_id:
+                logger.debug("search_id отсутствует, выполняем POST запрос для первой страницы")
+                data = self._build_search_form_params(
+                    title=title,
+                    forum_ids=forum_ids,
+                    sort_option=sort_option,
+                    sort_direction=sort_direction,
+                    time_filter=time_filter,
+                )
+                
+                try:
+                    content = await self._send_post_request(url, data)
+                except RuTrackerRequestError as ex:
+                    if not hasattr(ex, 'url') or ex.url is None:
+                        ex.url = url
+                    raise
+                
+                search_id = self._extract_search_id(content)
+                if search_id:
+                    self._search_id_cache[search_key] = search_id
+                    logger.debug(f"search_id сохранен в кеш: {search_id}")
+                else:
+                    raise RuTrackerRequestError(
+                        "Не удалось извлечь search_id из ответа для пагинации",
+                        url=url
+                    )
+            
+            params = self._build_search_pagination_params(
+                title=title,
+                search_id=search_id,
+                page=page,
+            )
+            
+            try:
+                content = await self._send_get_request(url, params)
+            except RuTrackerRequestError as ex:
+                if not hasattr(ex, 'url') or ex.url is None:
+                    ex.url = url
+                if not hasattr(ex, 'params') or ex.params is None:
+                    ex.params = params
+                raise
+            
+            try:
+                results = self._parse_search_results(content, return_search_dict)
+                logger.info(
+                    f"Поиск через форму завершен успешно: найдено {len(results)} результатов на странице {page}"
+                )
+                return results
+            except RuTrackerParsingError as ex:
+                logger.error(f"Ошибка парсинга результатов поиска: {ex}")
+                if not hasattr(ex, 'html_snippet') or ex.html_snippet is None:
+                    html_snippet = content[:200] if content else None
+                    if html_snippet:
+                        ex.html_snippet = html_snippet
+                raise
+    
+    async def search_all_pages_with_form(
+        self,
+        title: str,
+        return_search_dict: bool = False,
+        max_pages: Optional[int] = None,
+        forum_ids: Optional[List[int]] = None,
+        sort_option: Optional[int] = None,
+        sort_direction: Optional[int] = None,
+        time_filter: Optional[int] = None,
+    ) -> list[Union[SearchResult, dict]]:
+        """
+        Выполняет поиск через форму по заданному заголовку на всех страницах (до max_pages страниц).
+        Автоматически использует POST для первой страницы и GET с search_id для остальных.
+        
+        :param title: Заголовок для поиска.
+        :param return_search_dict: Флаг, указывающий, следует ли возвращать результаты в виде словарей (если True) или объектов SearchResult (если False).
+        :param max_pages: Максимальное количество страниц для поиска (по умолчанию используется значение из констант).
+        :param forum_ids: Список ID форумов (по умолчанию [-1] - все имеющиеся).
+        :param sort_option: Опция сортировки (если не указана, используется из формы).
+        :param sort_direction: Направление сортировки (1 - возрастание, 2 - убывание, если не указано, используется из формы).
+        :param time_filter: Фильтр по времени (опционально).
+        :return: Список всех результатов поиска.
+        :raises RuTrackerParsingError: Если происходит ошибка при парсинге результатов поиска.
+        """
+        if max_pages is None:
+            max_pages = self._get_max_pages()
+
+        logger.info(
+            f"Начало поиска через форму по всем страницам: title='{title}', max_pages={max_pages}, "
+            f"forum_ids={forum_ids}, sort_option={sort_option}, "
+            f"sort_direction={sort_direction}, time_filter={time_filter}"
+        )
+        all_results = []
+        page = 1
+        while page <= max_pages:
+            try:
+                results = await self.search_with_form(
+                    title=title,
+                    page=page,
+                    return_search_dict=return_search_dict,
+                    forum_ids=forum_ids,
+                    sort_option=sort_option,
+                    sort_direction=sort_direction,
+                    time_filter=time_filter,
+                )
+                if not results:
+                    logger.debug(
+                        f"На странице {page} результатов не найдено, завершение поиска"
+                    )
+                    break
+                all_results.extend(results)
+                page += 1
+            except Exception as ex:
+                logger.warning(f"Ошибка при поиске на странице {page}: {ex}")
+                break
+
+        logger.info(
+            f"Поиск через форму по всем страницам завершен: найдено {len(all_results)} результатов"
+        )
+        return all_results
 
     async def get_search_form(self, force_refresh: bool = False) -> SearchFormData:
         """

@@ -138,3 +138,116 @@ class SearchFormData(BaseModel):
     )
 
     model_config = ConfigDict(use_enum_values=True, validate_assignment=True)
+    
+    def get_sort_option_by_name(self, name: str) -> Optional[SortOption]:
+        """
+        Находит опцию сортировки по названию (частичное совпадение, регистронезависимо).
+        
+        :param name: Название опции сортировки (например, "дате", "размеру", "скачиваниям").
+        :return: Объект SortOption или None, если не найдено.
+        """
+        name_lower = name.lower()
+        for option in self.sort_options:
+            if name_lower in option.name.lower():
+                return option
+        return None
+    
+    def get_sort_option_by_value(self, value: int) -> Optional[SortOption]:
+        """
+        Находит опцию сортировки по значению.
+        
+        :param value: Значение опции сортировки.
+        :return: Объект SortOption или None, если не найдено.
+        """
+        return next((opt for opt in self.sort_options if opt.value == value), None)
+    
+    def get_sort_direction_by_name(self, name: str) -> Optional[SortDirection]:
+        """
+        Находит направление сортировки по названию (частичное совпадение, регистронезависимо).
+        
+        :param name: Название направления (например, "возрастанию", "убыванию").
+        :return: Объект SortDirection или None, если не найдено.
+        """
+        name_lower = name.lower()
+        for direction in self.sort_directions:
+            if name_lower in direction.name.lower():
+                return direction
+        return None
+    
+    def get_time_filter_by_name(self, name: str) -> Optional[TimeFilterOption]:
+        """
+        Находит фильтр по времени по названию (частичное совпадение, регистронезависимо).
+        
+        :param name: Название фильтра (например, "7 дней", "месяц", "год").
+        :return: Объект TimeFilterOption или None, если не найдено.
+        """
+        name_lower = name.lower()
+        for time_filter in self.time_filter_options:
+            if name_lower in time_filter.name.lower():
+                return time_filter
+        return None
+    
+    def get_time_filter_by_value(self, value: int) -> Optional[TimeFilterOption]:
+        """
+        Находит фильтр по времени по значению.
+        
+        :param value: Значение фильтра по времени.
+        :return: Объект TimeFilterOption или None, если не найдено.
+        """
+        return next((tf for tf in self.time_filter_options if tf.value == value), None)
+    
+    def get_forum_ids_by_name(self, name: str) -> List[int]:
+        """
+        Находит ID форумов по названию раздела (частичное совпадение, регистронезависимо).
+        Может вернуть несколько ID, если найдено несколько совпадений.
+        
+        :param name: Название раздела форума (например, "Музыка", "Фильмы", "Игры").
+        :return: Список ID форумов.
+        """
+        forum_ids = []
+        name_lower = name.lower()
+        for group in self.forum_groups:
+            for section in group.sections:
+                if name_lower in section.name.lower():
+                    forum_ids.append(section.id)
+        return forum_ids
+    
+    def get_forum_ids_by_group_name(self, group_name: str) -> List[int]:
+        """
+        Находит ID всех форумов в группе по названию группы (частичное совпадение, регистронезависимо).
+        
+        :param group_name: Название группы разделов (например, "Музыка", "Видео", "Игры").
+        :return: Список ID форумов в группе.
+        """
+        group_name_lower = group_name.lower()
+        for group in self.forum_groups:
+            if group_name_lower in group.name.lower():
+                return [section.id for section in group.sections]
+        return []
+    
+    @property
+    def default_sort_option(self) -> Optional[SortOption]:
+        """
+        Возвращает выбранную опцию сортировки по умолчанию.
+        
+        :return: Объект SortOption или None, если ничего не выбрано.
+        """
+        return next((opt for opt in self.sort_options if opt.is_selected), None)
+    
+    @property
+    def default_sort_direction(self) -> Optional[SortDirection]:
+        """
+        Возвращает выбранное направление сортировки по умолчанию.
+        
+        :return: Объект SortDirection или None, если ничего не выбрано.
+        """
+        return next((d for d in self.sort_directions if d.is_selected), None)
+    
+    @property
+    def default_time_filter(self) -> Optional[TimeFilterOption]:
+        """
+        Возвращает выбранный фильтр по времени по умолчанию.
+        
+        :return: Объект TimeFilterOption или None, если ничего не выбрано.
+        """
+        return next((tf for tf in self.time_filter_options if tf.is_selected), None)
