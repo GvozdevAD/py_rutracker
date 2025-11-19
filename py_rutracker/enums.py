@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class Url(Enum):
     HOST = "https://rutracker.org"
     FORUM = f"{HOST}/forum"
