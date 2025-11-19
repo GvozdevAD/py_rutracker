@@ -1,5 +1,5 @@
 [project]
-name = "py-rutracker"
+name = "py-rutracker-client "
 version = "0.2.0"
 description = "Библиотека для работы с RuTracker API - поиск раздач и скачивание торрентов"
 authors = [
