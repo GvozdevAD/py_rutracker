@@ -1,19 +1,17 @@
 from bs4 import BeautifulSoup
 
-from ..models.search import SearchResult
 from ..enums import Url
-from ..utils.helpers import (
-    format_size,
-    convert_unix_to_local_time,
-    is_integer
-)
+from ..logger import get_logger
+from ..models.search import SearchResult
+from ..utils.helpers import convert_unix_to_local_time, format_size, is_integer
+
+logger = get_logger(__name__)
 
 
 class ParsingPage:
     @staticmethod
     def search(
-            html: str,
-            return_dict_format: bool = False
+        html: str, return_dict_format: bool = False
     ) -> list[SearchResult | dict]:
         """Парсит HTML и возвращает результаты поиска в указанном формате."""
         results = []
@@ -23,37 +21,35 @@ class ParsingPage:
         if not table:
             return results
         rows = table.find("tbody").find_all("tr")
-        
+
         for row in rows:
             info_row = row.find_all("td")[1:]
             if not info_row:
                 break
-            
+
             approved = info_row[0].get("title")
-            
-            
+
             if approved == "закрыто":
                 continue
 
             category = info_row[1].find("a").text
             category_url = info_row[1].find("a").get("href")
-            if category_url: 
+            if category_url:
                 category_url = f"{Url.FORUM.value}/{category_url}"
-            
+
             title = info_row[2].find("a").text
             title_url = info_row[2].find("a").get("href", "")
             if title_url:
                 title_url = f"{Url.FORUM.value}/{title_url}"
             topic_id = int(info_row[2].find("a").get("data-topic_id"))
 
-            
             author = info_row[3].find("a").text
             author_url = info_row[3].find("a").get("href")
             if author_url:
                 author_url = f"{Url.FORUM.value}/{author_url}"
 
             size, unit = format_size(int(info_row[4]["data-ts_text"]))
-            
+
             download_url = info_row[4].find("a").get("href")
             if download_url:
                 download_url = f"{Url.FORUM.value}/{download_url}"
@@ -64,37 +60,32 @@ class ParsingPage:
             added = convert_unix_to_local_time(int(info_row[8]["data-ts_text"]))
 
             result = {
-                    "topic_id": topic_id,
-                    "approved": approved or "", 
-                    "category": category, 
-                    "category_url": category_url or None, 
-                    "title": title,
-                    "title_url": title_url or None,
-                    "author": author,
-                    "author_url": author_url or None,
-                    "size": size,
-                    "unit": unit,
-                    "download_url": download_url,
-                    "seedmed": seedmed_text,  # Pydantic автоматически преобразует через валидатор
-                    "leechmed": leechmed_text,
-                    "download_counter": download_counter_text,
-                    "added": added
-                }
+                "topic_id": topic_id,
+                "approved": approved or "",
+                "category": category,
+                "category_url": category_url or None,
+                "title": title,
+                "title_url": title_url or None,
+                "author": author,
+                "author_url": author_url or None,
+                "size": size,
+                "unit": unit,
+                "download_url": download_url,
+                "seedmed": seedmed_text,
+                "leechmed": leechmed_text,
+                "download_counter": download_counter_text,
+                "added": added,
+            }
             if return_dict_format:
                 results.append(result)
             else:
                 try:
-                    # Pydantic автоматически валидирует и преобразует типы
                     results.append(SearchResult(**result))
                 except Exception as e:
                     # Если валидация не прошла, пропускаем этот результат
-                    # Можно добавить логирование для отладки
+                    logger.warning(
+                        f"Ошибка валидации результата поиска (topic_id={result.get('topic_id', 'unknown')}): {e}. "
+                        f"Результат пропущен."
+                    )
                     continue
         return results
-
-    @staticmethod
-    def viewtopic(
-            html: str,
-    ):
-        """ """
-

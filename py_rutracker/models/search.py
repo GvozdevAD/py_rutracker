@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field, field_validator
 from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class SearchResult(BaseModel):
@@ -21,6 +22,7 @@ class SearchResult(BaseModel):
     :param download_counter: Счётчик скачиваний результата.
     :param added: Дата и время добавления результата.
     """
+
     topic_id: int = Field(..., description="Идентификатор результата", gt=0)
     approved: str = Field(..., description="Статус проверки результата")
     category: str = Field(..., description="Категория, в которой размещён результат")
@@ -36,17 +38,17 @@ class SearchResult(BaseModel):
     leechmed: int = Field(default=0, description="Количество личеров", ge=0)
     download_counter: int = Field(default=0, description="Счётчик скачиваний", ge=0)
     added: str = Field(..., description="Дата и время добавления результата")
-    
-    @field_validator('unit')
+
+    @field_validator("unit")
     @classmethod
     def validate_unit(cls, v: str) -> str:
         """Валидация единицы измерения."""
-        allowed_units = ['bytes', 'KB', 'MB', 'GB', 'TB']
+        allowed_units = ["bytes", "KB", "MB", "GB", "TB"]
         if v not in allowed_units:
             return v
         return v
-    
-    @field_validator('seedmed', 'leechmed', 'download_counter', mode='before')
+
+    @field_validator("seedmed", "leechmed", "download_counter", mode="before")
     @classmethod
     def validate_non_negative(cls, v):
         """Валидация неотрицательных значений с автоматическим преобразованием строк."""
@@ -55,18 +57,18 @@ class SearchResult(BaseModel):
         if v is None:
             return 0
         return max(0, int(v))
-    
-    @field_validator('category_url', 'title_url', 'author_url', mode='before')
+
+    @field_validator("category_url", "title_url", "author_url", mode="before")
     @classmethod
     def validate_url(cls, v):
         """Валидация URL - если пустая строка, возвращаем None."""
         if v == "" or v is None:
             return None
         return v
-    
+
     def __str__(self) -> str:
         return (
-            f"Topic ID: {self.topic_id}\n" 
+            f"Topic ID: {self.topic_id}\n"
             f"Title: {self.title}\n"
             f"Author: {self.author}\n"
             f"Category: {self.category}\n"
@@ -77,28 +79,12 @@ class SearchResult(BaseModel):
             f"Leech: {self.leechmed}\n"
             f"Download Counter: {self.download_counter}"
         )
-    
+
     def model_dump_dict(self) -> dict:
         """
         Возвращает словарь с данными модели.
         Удобно для обратной совместимости с return_search_dict=True.
         """
         return self.model_dump()
-    
-    class Config:
-        """Конфигурация Pydantic модели."""
-        use_enum_values = True
-        validate_assignment = True
 
-
-class ResponseRuTracker(BaseModel):
-    """
-    Класс для хранения ответа от RuTracker.
-    """
-    success: bool = Field(..., description="Успешность операции")
-    results: list[SearchResult] = Field(default_factory=list, description="Список результатов поиска")
-    
-    class Config:
-        """Конфигурация Pydantic модели."""
-        use_enum_values = True
-        validate_assignment = True
+    model_config = ConfigDict(use_enum_values=True, validate_assignment=True)

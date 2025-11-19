@@ -1,11 +1,20 @@
+import re
 from abc import ABC, abstractmethod
+from pathlib import Path
+from time import time
 from typing import Optional, Union
 
 from ..core.constants import DEFAULT_MAX_SEARCH_PAGES, SEARCH_PAGE_SIZE
-from ..models.search import SearchResult
 from ..enums import Url
-from ..exceptions import RuTrackerParsingError, RuTrackerRequestError
+from ..exceptions import (
+    RuTrackerDownloadError,
+    RuTrackerParsingError,
+    RuTrackerRequestError,
+)
+from ..models.search import SearchResult
+from ..models.search_form import SearchFormData
 from ..parsers.page import ParsingPage
+from ..parsers.search_form import SearchFormParser
 from ..utils.validators import (
     build_search_params,
     get_auth_data,
@@ -30,6 +39,8 @@ class BaseRuTrackerClient(ABC):
         self._login = login
         self._password = password
         self.parser = ParsingPage()
+        self._search_form_cache: Optional[dict] = None
+        self._search_form_cache_ttl: int = 86400  # 24 часа
 
     def _get_auth_data(self) -> dict:
         """
@@ -77,9 +88,7 @@ class BaseRuTrackerClient(ABC):
         try:
             results = self.parser.search(html_content, return_search_dict)
         except Exception as ex:
-            raise RuTrackerParsingError(
-                f"Ошибка парсинга результатов поиска: {ex}"
-            )
+            raise RuTrackerParsingError(f"Ошибка парсинга результатов поиска: {ex}")
         return results
 
     def _validate_download_params(
@@ -118,12 +127,31 @@ class BaseRuTrackerClient(ABC):
         """
         return DEFAULT_MAX_SEARCH_PAGES
 
+    def _extract_topic_id_from_url(
+        self, topic_id_or_url: Union[int, str]
+    ) -> Optional[int]:
+        """
+        Извлекает topic_id из URL или возвращает его, если передан int.
+
+        :param topic_id_or_url: Идентификатор топика (int) или URL (str).
+        :return: Идентификатор топика или None, если не удалось извлечь.
+        """
+        if isinstance(topic_id_or_url, int):
+            return topic_id_or_url
+
+        try:
+            # Формат URL: https://rutracker.org/forum/dl.php?t=12345
+            match = re.search(r"t=(\d+)", str(topic_id_or_url))
+            if match:
+                return int(match.group(1))
+        except Exception:
+            pass
+
+        return None
+
     @abstractmethod
     def search(
-        self,
-        title: str,
-        page: int = 1,
-        return_search_dict: bool = False
+        self, title: str, page: int = 1, return_search_dict: bool = False
     ) -> list[Union[SearchResult, dict]]:
         """
         Выполняет поиск по заданному заголовку и возвращает результаты.
@@ -137,12 +165,118 @@ class BaseRuTrackerClient(ABC):
         pass
 
     @abstractmethod
-    def download(self, topic_id_or_url: Union[int, str]) -> bytes:
+    def get_torrent(self, topic_id_or_url: Union[int, str]) -> bytes:
         """
-        Получает файл торрента по указанному идентификатору или URL.
+        Получает содержимое файла торрента по указанному идентификатору или URL.
 
         :param topic_id_or_url: Идентификатор (топика) или URL для получения файла торрента.
         :return: Содержимое файла торрента в виде байтов.
         """
         pass
 
+    def _prepare_download_path(
+        self,
+        topic_id_or_url: Union[int, str],
+        save_path: Optional[str] = None,
+        filename: Optional[str] = None,
+    ) -> Path:
+        """
+        Подготавливает путь для сохранения файла торрента.
+
+        :param topic_id_or_url: Идентификатор (топика) или URL для получения файла торрента.
+        :param save_path: Путь к директории для сохранения файла. Если None, используется текущая директория.
+        :param filename: Имя файла. Если None, используется topic_id.torrent.
+        :return: Полный путь к файлу для сохранения.
+        """
+        if save_path is None:
+            save_path = Path.cwd()
+        else:
+            save_path = Path(save_path)
+
+        save_path.mkdir(parents=True, exist_ok=True)
+
+        if filename is None:
+            topic_id = self._extract_topic_id_from_url(topic_id_or_url)
+            if topic_id is not None:
+                filename = f"{topic_id}.torrent"
+            else:
+                filename = "torrent.torrent"
+        elif not filename.endswith(".torrent"):
+            filename = f"{filename}.torrent"
+
+        return save_path / filename
+
+    @abstractmethod
+    def download(
+        self,
+        topic_id_or_url: Union[int, str],
+        save_path: Optional[str] = None,
+        filename: Optional[str] = None,
+    ) -> str:
+        """
+        Скачивает файл торрента и сохраняет его на диск.
+
+        :param topic_id_or_url: Идентификатор (топика) или URL для получения файла торрента.
+        :param save_path: Путь к директории для сохранения файла. Если None, используется текущая директория.
+        :param filename: Имя файла. Если None, используется topic_id.torrent.
+        :return: Полный путь к сохраненному файлу.
+        :raises RuTrackerRequestError: Если запрос на получение файла торрента завершился ошибкой.
+        :raises RuTrackerDownloadError: Если передан недопустимый параметр или файл не найден.
+        """
+        pass
+
+    def _is_search_form_cache_valid(self) -> bool:
+        """
+        Проверяет валидность кеша формы поиска.
+
+        :return: True если кеш существует и не истек, False в противном случае.
+        """
+        if self._search_form_cache is None:
+            return False
+
+        cache_timestamp = self._search_form_cache.get("timestamp", 0)
+        cache_ttl = self._search_form_cache.get("ttl", self._search_form_cache_ttl)
+        current_time = time()
+
+        return (current_time - cache_timestamp) < cache_ttl
+
+    def _get_search_form_cache(self) -> Optional[SearchFormData]:
+        """
+        Получает данные формы поиска из кеша, если кеш валиден.
+
+        :return: Объект SearchFormData или None, если кеш невалиден или отсутствует.
+        """
+        if not self._is_search_form_cache_valid():
+            return None
+
+        return self._search_form_cache.get("data")
+
+    def _set_search_form_cache(self, data: SearchFormData) -> None:
+        """
+        Сохраняет данные формы поиска в кеш.
+
+        :param data: Объект SearchFormData для сохранения в кеш.
+        """
+        self._search_form_cache = {
+            "data": data,
+            "timestamp": time(),
+            "ttl": self._search_form_cache_ttl,
+        }
+
+    def _clear_search_form_cache(self) -> None:
+        """
+        Очищает кеш формы поиска.
+        """
+        self._search_form_cache = None
+
+    @abstractmethod
+    def get_search_form(self, force_refresh: bool = False) -> SearchFormData:
+        """
+        Получает данные формы поиска RuTracker.
+
+        :param force_refresh: Принудительно обновить кеш, игнорируя время жизни.
+        :return: Объект SearchFormData с данными формы поиска.
+        :raises RuTrackerRequestError: Если запрос на получение формы завершился ошибкой.
+        :raises RuTrackerParsingError: Если произошла ошибка при парсинге формы.
+        """
+        pass

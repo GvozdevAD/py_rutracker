@@ -14,24 +14,21 @@ def format_size(bytes: int) -> tuple[float, str]:
     if bytes < 0:
         raise ValueError("Размер не может быть отрицательным")
     if bytes == 0:
-        return 0.0, 'KB'
-    if bytes >= 1024 ** 3:
-        gigabytes = bytes / (1024 ** 3)
-        return round(gigabytes, 2), 'GB'
-    elif bytes >= 1024 ** 2:
-        megabytes = bytes / (1024 ** 2)
-        return round(megabytes, 2), 'MB'
+        return 0.0, "KB"
+    if bytes >= 1024**3:
+        gigabytes = bytes / (1024**3)
+        return round(gigabytes, 2), "GB"
+    elif bytes >= 1024**2:
+        megabytes = bytes / (1024**2)
+        return round(megabytes, 2), "MB"
     elif bytes >= 1024:
         kilobytes = bytes / 1024
-        return round(kilobytes, 2), 'KB'
+        return round(kilobytes, 2), "KB"
     else:
-        return float(bytes), 'bytes'
+        return float(bytes), "bytes"
 
 
-def convert_unix_to_local_time(
-        epoch: int, 
-        offset_hours: int = 3
-) -> str:
+def convert_unix_to_local_time(epoch: int, offset_hours: int = 3) -> str:
     """
     Конвертирует время в формате эпохи Unix в строку с датой и временем с учетом смещения времени.
 
@@ -41,7 +38,7 @@ def convert_unix_to_local_time(
     """
     dt = datetime.fromtimestamp(epoch, tz=timezone.utc)
     offset = dt + timedelta(hours=offset_hours)
-    return offset.strftime('%d-%m-%Y %H:%M:%S')
+    return offset.strftime("%d-%m-%Y %H:%M:%S")
 
 
 def is_integer(value: str) -> bool:
@@ -49,4 +46,3 @@ def is_integer(value: str) -> bool:
     Проверяет, является ли строка целым числом.
     """
     return value.isdigit()
-

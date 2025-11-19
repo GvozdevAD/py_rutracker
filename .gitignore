@@ -1,12 +1,7 @@
-env
-TEST
-tests
 .pytest_cache
-main.py
 /**/__pycache__
 .DS_Store
 /**/.DS_Store
-/py_rutracker/async_client.py
 py_rutracker_client.egg-info/
 build/
 dist/
@@ -14,3 +9,5 @@ dist_ver/
 .pypirc
 docs/
 test.py
+.env
+html.html

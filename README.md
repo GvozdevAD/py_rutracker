@@ -75,9 +75,13 @@ proxies = 'http://<PROXY_IP_ADDRESS>:<PROXY_PORT>'
 async def main():
      async with AsyncRuTrackerClient(login, password, proxies) as client:
           results = await client.search_all_pages("rammstein")
-          bytes_data = await client.download(results[0].download_url)
-          with open(f"{results[0].topic_id}.torrent", "wb") as file:
-               file.write(bytes_data)
+          if results:
+              # Автоматическое сохранение файла
+              file_path = await client.download(
+                  results[0].topic_id,
+                  save_path="./torrents"
+              )
+              print(f"Торрент сохранен: {file_path}")
 
 asyncio.run(main())
 ```
@@ -136,15 +140,36 @@ Download Counter: 2526
 ```
 
 ### Скачать .torrent файл
+
+#### Вариант 1: Автоматическое сохранение (рекомендуется)
 ```python
 from py_rutracker import RuTrackerClient
 
 with RuTrackerClient("your_login", "your_password") as client:
      results = client.search_all_pages("Static-X")
-     topic_id = results[0].topic_id
-     bytes_data = client.download(topic_id)
-     with open(f"{topic_id}.torrent", "wb") as file:
-          file.write(bytes_data)
+     if results:
+         topic_id = results[0].topic_id
+         # Автоматически сохраняет файл в указанную директорию
+         file_path = client.download(
+             topic_id,
+             save_path="./torrents",  # Путь к папке для сохранения
+             filename=None  # Если None, используется topic_id.torrent
+         )
+         print(f"Торрент сохранен: {file_path}")
+```
+
+#### Вариант 2: Получение байтов для дополнительной обработки
+```python
+from py_rutracker import RuTrackerClient
+
+with RuTrackerClient("your_login", "your_password") as client:
+     results = client.search_all_pages("Static-X")
+     if results:
+         topic_id = results[0].topic_id
+         # Получаем байты для дополнительной обработки
+         bytes_data = client.get_torrent(topic_id)
+         with open(f"{topic_id}.torrent", "wb") as file:
+              file.write(bytes_data)
 ```
 
 ## Логирование
@@ -202,7 +227,7 @@ set PY_RUTRACKER_LOG_LEVEL=DEBUG
 
 Библиотека использует современные технологии и лучшие практики:
 
-- **Pydantic** — для валидации данных и моделей. Все модели данных (`SearchResult`, `ResponseRuTracker`) используют Pydantic для автоматической валидации типов и значений.
+- **Pydantic** — для валидации данных и моделей. Все модели данных (`SearchResult`) используют Pydantic для автоматической валидации типов и значений.
 - **aiohttp** — для асинхронных HTTP-запросов
 - **requests** — для синхронных HTTP-запросов
 - **BeautifulSoup4** — для парсинга HTML
@@ -245,6 +270,16 @@ python examples/logging_example.py
     Выполняет поиск по заданному заголовку на всех страницах (до 10 страниц).  
     `title`: Заголовок для поиска.  
     `return_search_dict`: Флаг, указывающий, следует ли возвращать результаты в виде словарей (если True) или объектов SearchResult (если False).  
+* `get_torrent(topic_id_or_url: int | str) -> bytes`  
+    Получает содержимое файла торрента по указанному идентификатору или URL.  
+    `topic_id_or_url`: Идентификатор (топика) или URL для получения файла торрента.  
+    Возвращает: Содержимое файла торрента в виде байтов.  
+* `download(topic_id_or_url: int | str, save_path: str = None, filename: str = None) -> str`  
+    Скачивает файл торрента и сохраняет его на диск.  
+    `topic_id_or_url`: Идентификатор (топика) или URL для получения файла торрента.  
+    `save_path`: Путь к директории для сохранения файла (если None, используется текущая директория).  
+    `filename`: Имя файла (если None, используется topic_id.torrent).  
+    Возвращает: Полный путь к сохраненному файлу.  
 
 ## Внесение вклада
 

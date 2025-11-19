@@ -1,10 +1,12 @@
-from typing import Union, Optional
+from typing import Optional, Union
 
 from ..enums import Url
-from ..exceptions import RuTrackerDownloadError, RuTrackerAuthError
+from ..exceptions import RuTrackerAuthError, RuTrackerDownloadError
 
 
-def validate_topic_id_or_url(topic_id_or_url: Union[int, str]) -> tuple[str, Optional[dict]]:
+def validate_topic_id_or_url(
+    topic_id_or_url: Union[int, str],
+) -> tuple[str, Optional[dict]]:
     """
     Валидирует и нормализует topic_id или URL для скачивания торрента.
 
@@ -16,7 +18,9 @@ def validate_topic_id_or_url(topic_id_or_url: Union[int, str]) -> tuple[str, Opt
         params = {"t": topic_id_or_url}
         url = Url.DOWNLOAD.value
         return url, params
-    elif isinstance(topic_id_or_url, str) and topic_id_or_url.startswith(Url.DOWNLOAD.value):
+    elif isinstance(topic_id_or_url, str) and topic_id_or_url.startswith(
+        Url.DOWNLOAD.value
+    ):
         url = topic_id_or_url
         params = None
         return url, params
@@ -37,9 +41,7 @@ def validate_auth_response(text: str, status_code: int, has_cookies: bool) -> No
     :raises RuTrackerAuthError: Если аутентификация не удалась.
     """
     if status_code != 200:
-        raise RuTrackerAuthError(
-            f"Ошибка аутентификации: статус-код {status_code}"
-        )
+        raise RuTrackerAuthError(f"Ошибка аутентификации: статус-код {status_code}")
     if "cap_sid" in text:
         raise RuTrackerAuthError(
             "Найдена капча при аутентификации! Пройдите её в браузере и попробуйте еще раз!"
@@ -56,11 +58,7 @@ def get_auth_data(login: str, password: str) -> dict:
     :param password: Пароль пользователя.
     :return: Словарь с данными для POST-запроса.
     """
-    return {
-        'login_username': login,
-        'login_password': password,
-        'login': 'Вход'
-    }
+    return {"login_username": login, "login_password": password, "login": "Вход"}
 
 
 def build_search_params(title: str, page: int, page_size: int = 50) -> dict:
@@ -76,4 +74,3 @@ def build_search_params(title: str, page: int, page_size: int = 50) -> dict:
         "start": (page - 1) * page_size,
         "nm": title,
     }
-

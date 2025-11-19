@@ -4,7 +4,15 @@
 По умолчанию библиотека логирует только WARNING и выше, чтобы не засорять вывод.
 Для отладки можно включить более подробное логирование.
 """
+
+import sys
+from pathlib import Path
+
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 import logging
+
 from py_rutracker import RuTrackerClient, configure_logger
 
 # ============================================================================
@@ -12,17 +20,13 @@ from py_rutracker import RuTrackerClient, configure_logger
 # ============================================================================
 
 # Установить уровень INFO для просмотра информационных сообщений
-configure_logger(level='INFO')
+configure_logger(level="INFO")
 
 # Или использовать константы из модуля logging
 configure_logger(level=logging.DEBUG)
 
 # С записью в файл
-configure_logger(
-    level='DEBUG',
-    log_to_file=True,
-    log_file_path="rutracker.log"
-)
+configure_logger(level="DEBUG", log_to_file=True, log_file_path="rutracker.log")
 
 # ============================================================================
 # Вариант 2: Использование переменной окружения (удобно для продакшена)
