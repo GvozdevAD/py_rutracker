@@ -1,13 +1,10 @@
-[project]
-name = "py-rutracker"
+[tool.poetry]
+name = "py-rutracker-client"
 version = "0.2.0"
 description = "Библиотека для работы с RuTracker API - поиск раздач и скачивание торрентов"
-authors = [
-    {name = "GvozdevAD", email = "alexander@gvozdev.net"}
-]
+authors = ["GvozdevAD <alexander@gvozdev.net>"]
 readme = "README.md"
-license = {text = "MIT"}
-requires-python = ">=3.13"
+license = "MIT"
 keywords = ["rutracker", "torrent", "tracker", "api", "async", "scraper"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -20,21 +17,22 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Utilities",
 ]
-dependencies = [
-    "beautifulsoup4 (>=4.14.2,<5.0.0)",
-    "aiohttp (>=3.13.2,<4.0.0)",
-    "requests (>=2.32.5,<3.0.0)",
-    "lxml (>=6.0.2,<7.0.0)",
-    "pydantic (>=2.12.4,<3.0.0)",
-    "tenacity (>=9.1.2,<10.0.0)",
-]
+packages = [{include = "py_rutracker"}]
 
-[project.urls]
+[tool.poetry.dependencies]
+python = ">=3.13"
+beautifulsoup4 = ">=4.14.2,<5.0.0"
+aiohttp = ">=3.13.2,<4.0.0"
+requests = ">=2.32.5,<3.0.0"
+lxml = ">=6.0.2,<7.0.0"
+pydantic = ">=2.12.4,<3.0.0"
+tenacity = ">=9.1.2,<10.0.0"
+
+[tool.poetry.urls]
 Homepage = "https://github.com/GvozdevAD/py_rutracker"
 Documentation = "https://github.com/GvozdevAD/py_rutracker#readme"
 Repository = "https://github.com/GvozdevAD/py_rutracker"
 Issues = "https://github.com/GvozdevAD/py_rutracker/issues"
-
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
