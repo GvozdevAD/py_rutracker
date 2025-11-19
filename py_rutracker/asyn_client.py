@@ -20,12 +20,14 @@ class AsyncRuTrackerClient:
             login: str,
             password: str,
             proxy: str = None,
+            user_agent: str = None,
     ) -> None:
         """
         """
         self._login = login
         self._password = password
         self.proxy = proxy
+        self.user_agent = user_agent or 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         self.session = None
         self.parser = ParsingPage()
         self._ssl_context = ssl.create_default_context(
@@ -36,7 +38,10 @@ class AsyncRuTrackerClient:
     async def init(self)-> aiohttp.ClientSession:
         """ 
         """
-        self.session = aiohttp.ClientSession()
+        headers = {
+            'User-Agent': self.user_agent
+        }
+        self.session = aiohttp.ClientSession(headers=headers)
         await self.auth()
         return self.session
     
@@ -61,6 +66,7 @@ class AsyncRuTrackerClient:
                 ssl=self._ssl_context
             ) as response:
                 text = await response.text()
+                print(text)
                 if response.status != 200:
                     raise RuTrackerAuthError(f"Ошибка аутентификации: статус-код {response.status}")
                 if "cap_sid" in text:
