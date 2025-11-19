@@ -14,6 +14,7 @@ from ..logger import get_logger
 from ..models.search import SearchResult
 from ..models.search_form import SearchFormData
 from ..parsers.search_form import SearchFormParser
+from ..utils.retry import retry_on_network_error
 
 logger = get_logger(__name__)
 
@@ -49,30 +50,57 @@ class RuTrackerClient(BaseRuTrackerClient):
             session.proxies.update(proxies)
         return session
 
+    @retry_on_network_error(max_attempts=3, min_wait=2.0, max_wait=10.0)
     def _send_request(self, url: str, params: dict = None) -> requests.Response:
         """
         Отправляет GET-запрос на указанный URL с параметрами.
+        Автоматически повторяет запрос при сетевых ошибках и временных ошибках сервера (5xx).
 
         :param url: URL для отправки запроса.
         :param params: Параметры запроса.
         :return: Объект requests.Response с ответом от сервера.
-        :raises RuTrackerAuthError: Если статус-код ответа не 200 или содержимое
+        :raises RuTrackerRequestError: Если статус-код ответа не 200 или содержимое
         страницы указывает на необходимость аутентификации.
         """
         logger.debug(f"Отправка GET-запроса: url={url}, params={params}")
         try:
-            response = self.session.get(url, params=params)
+            response = self.session.get(url, params=params, timeout=30)
         except Exception as ex:
-            logger.exception("Ошибка при выполнении HTTP-запроса")
-            raise RuTrackerAuthError(f"Ошибка при выполнении запроса: {ex}") from ex
+            ex_type_name = type(ex).__name__
+            is_network_error = ('ConnectionError' in ex_type_name or 
+                              'Timeout' in ex_type_name or 
+                              'RequestException' in ex_type_name)
+            
+            if is_network_error:
+                logger.warning(f"Сетевая ошибка при выполнении HTTP-запроса: {ex}")
+            else:
+                logger.exception("Неожиданная ошибка при выполнении HTTP-запроса")
+            raise RuTrackerRequestError(
+                f"Ошибка при выполнении запроса: {ex}",
+                url=url,
+                params=params
+            ) from ex
+        
         if response.status_code != 200:
             logger.warning(f"Получен неожиданный статус-код: {response.status_code}")
-            raise RuTrackerRequestError(
-                f"Ошибка запроса: статус-код {response.status_code}"
+            error = RuTrackerRequestError(
+                f"Ошибка запроса: статус-код {response.status_code}",
+                url=url,
+                status_code=response.status_code,
+                params=params
             )
+            if 500 <= response.status_code < 600:
+                raise error
+            raise error
+        
         if "top-login-box" in response.text:
             logger.warning("Обнаружена необходимость аутентификации")
-            raise RuTrackerRequestError("Необходима аутентификация.")
+            raise RuTrackerRequestError(
+                "Необходима аутентификация.",
+                url=url,
+                status_code=response.status_code,
+                params=params
+            )
         return response
 
     def auth(self, login: str, password: str) -> None:
@@ -81,28 +109,59 @@ class RuTrackerClient(BaseRuTrackerClient):
 
         :param login: Логин для аутентификации.
         :param password: Пароль для аутентификации.
+        :raises RuTrackerValidationError: Если логин или пароль не проходят валидацию.
         :raises RuTrackerAuthError: Если статус-код ответа не 200,
                 аутентификация не удалась, или обнаружена капча.
         """
         logger.debug("Начало процесса аутентификации")
         data = self._get_auth_data()
+        auth_url = Url.AUTH.value
         try:
-            response = self.session.post(
-                Url.AUTH.value,
-                data=data,
-            )
-        except Exception as ex:
-            logger.exception("Неожиданная ошибка при выполнении запроса аутентификации")
-            raise RuTrackerAuthError(f"Ошибка при выполнении запроса: {ex}") from ex
-
-        try:
+            response = self._send_auth_request(auth_url, data)
             self._validate_auth_response(
                 response.text, response.status_code, bool(self.session.cookies)
             )
             logger.info("Аутентификация успешно выполнена")
+        except RuTrackerRequestError as ex:
+            logger.error(f"Ошибка аутентификации: {ex}")
+            raise RuTrackerAuthError(
+                f"Ошибка при выполнении запроса: {ex.message}",
+                url=auth_url,
+                status_code=ex.status_code
+            ) from ex
         except RuTrackerAuthError as ex:
             logger.error(f"Ошибка аутентификации: {ex}")
+            if not hasattr(ex, 'url') or ex.url is None:
+                ex.url = auth_url
             raise
+    
+    @retry_on_network_error(max_attempts=3, min_wait=2.0, max_wait=10.0)
+    def _send_auth_request(self, url: str, data: dict) -> requests.Response:
+        """
+        Отправляет POST-запрос для аутентификации с поддержкой retry.
+        
+        :param url: URL для отправки запроса.
+        :param data: Данные для POST-запроса.
+        :return: Объект requests.Response с ответом от сервера.
+        :raises RuTrackerRequestError: При сетевых ошибках или ошибках запроса.
+        """
+        try:
+            response = self.session.post(url, data=data, timeout=30)
+            return response
+        except Exception as ex:
+            ex_type_name = type(ex).__name__
+            is_network_error = ('ConnectionError' in ex_type_name or 
+                              'Timeout' in ex_type_name or 
+                              'RequestException' in ex_type_name)
+            
+            if is_network_error:
+                logger.warning(f"Сетевая ошибка при выполнении запроса аутентификации: {ex}")
+            else:
+                logger.exception("Неожиданная ошибка при выполнении запроса аутентификации")
+            raise RuTrackerRequestError(
+                f"Ошибка при выполнении запроса: {ex}",
+                url=url
+            ) from ex
 
     def search(
         self, title: str, page: int = 1, return_search_dict: bool = False
@@ -115,6 +174,7 @@ class RuTrackerClient(BaseRuTrackerClient):
         :param return_search_dict: Флаг, указывающий, следует ли возвращать результаты
         в виде словарей (если True) или объектов SearchResult (если False).
         :return: Список результатов поиска.
+        :raises RuTrackerValidationError: Если параметры title или page не проходят валидацию.
         :raises RuTrackerRequestError: Если происходит ошибка при выполнении запроса.
         :raises RuTrackerParsingError: Если происходит ошибка при парсинге результатов поиска.
         """
@@ -125,7 +185,11 @@ class RuTrackerClient(BaseRuTrackerClient):
         try:
             response = self._send_request(url, params)
         except RuTrackerRequestError as ex:
-            raise RuTrackerRequestError(str(ex)) from ex
+            if not hasattr(ex, 'url') or ex.url is None:
+                ex.url = url
+            if not hasattr(ex, 'params') or ex.params is None:
+                ex.params = params
+            raise
 
         try:
             results = self._parse_search_results(response.text, return_search_dict)
@@ -135,6 +199,10 @@ class RuTrackerClient(BaseRuTrackerClient):
             return results
         except RuTrackerParsingError as ex:
             logger.error(f"Ошибка парсинга результатов поиска: {ex}")
+            if not hasattr(ex, 'html_snippet') or ex.html_snippet is None:
+                html_snippet = response.text[:200] if response.text else None
+                if html_snippet:
+                    ex.html_snippet = html_snippet
             raise
 
     def search_all_pages(
@@ -198,7 +266,12 @@ class RuTrackerClient(BaseRuTrackerClient):
 
             if "Error" in response.text:
                 logger.error("Файл не найден: в ответе обнаружена ошибка")
-                raise RuTrackerDownloadError("Файл с таким ID не найден")
+                raise RuTrackerDownloadError(
+                    "Файл с таким ID не найден",
+                    topic_id_or_url=topic_id_or_url,
+                    url=url,
+                    status_code=response.status_code
+                )
 
             logger.info(f"Торрент успешно получен: размер {len(response.content)} байт")
             return response.content
@@ -206,7 +279,11 @@ class RuTrackerClient(BaseRuTrackerClient):
             raise
         except Exception as ex:
             logger.exception("Неожиданная ошибка при получении торрента")
-            raise RuTrackerRequestError(f"Ошибка при получении торрента: {ex}") from ex
+            raise RuTrackerRequestError(
+                f"Ошибка при получении торрента: {ex}",
+                url=url,
+                params=params
+            ) from ex
 
     def download(
         self,
@@ -258,7 +335,8 @@ class RuTrackerClient(BaseRuTrackerClient):
         except Exception as ex:
             logger.exception("Неожиданная ошибка при запросе формы поиска")
             raise RuTrackerRequestError(
-                f"Ошибка при получении формы поиска: {ex}"
+                f"Ошибка при получении формы поиска: {ex}",
+                url=url
             ) from ex
 
         try:
@@ -267,7 +345,11 @@ class RuTrackerClient(BaseRuTrackerClient):
             logger.info("Форма поиска успешно распарсена")
         except Exception as ex:
             logger.exception("Ошибка при парсинге формы поиска")
-            raise RuTrackerParsingError(f"Ошибка парсинга формы поиска: {ex}") from ex
+            html_snippet = response.text[:200] if response.text else None
+            raise RuTrackerParsingError(
+                f"Ошибка парсинга формы поиска: {ex}",
+                html_snippet=html_snippet
+            ) from ex
 
         self._set_search_form_cache(form_data)
 

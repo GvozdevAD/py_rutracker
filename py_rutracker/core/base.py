@@ -19,6 +19,7 @@ from ..utils.validators import (
     build_search_params,
     get_auth_data,
     validate_auth_response,
+    validate_login_password,
     validate_topic_id_or_url,
 )
 
@@ -35,9 +36,11 @@ class BaseRuTrackerClient(ABC):
 
         :param login: Логин для аутентификации.
         :param password: Пароль для аутентификации.
+        :raises RuTrackerValidationError: Если логин или пароль не проходят валидацию.
         """
-        self._login = login
-        self._password = password
+        validate_login_password(login, password)
+        self._login = login.strip()
+        self._password = password.strip()
         self.parser = ParsingPage()
         self._search_form_cache: Optional[dict] = None
         self._search_form_cache_ttl: int = 86400  # 24 часа
@@ -88,7 +91,11 @@ class BaseRuTrackerClient(ABC):
         try:
             results = self.parser.search(html_content, return_search_dict)
         except Exception as ex:
-            raise RuTrackerParsingError(f"Ошибка парсинга результатов поиска: {ex}")
+            html_snippet = html_content[:200] if html_content else None
+            raise RuTrackerParsingError(
+                f"Ошибка парсинга результатов поиска: {ex}",
+                html_snippet=html_snippet
+            ) from ex
         return results
 
     def _validate_download_params(

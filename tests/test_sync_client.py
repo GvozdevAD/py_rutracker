@@ -79,14 +79,18 @@ class TestRuTrackerClient:
     @patch('py_rutracker.clients.sync.requests')
     @patch.object(RuTrackerClient, 'auth')
     def test_send_request_exception(self, mock_auth, mock_requests):
-        """Тест исключения при запросе."""
+        """Тест исключения при запросе с retry механизмом."""
+        import requests as requests_module
         mock_sess = Mock()
-        mock_sess.get.side_effect = Exception("Network error")
+        mock_sess.get.side_effect = requests_module.exceptions.ConnectionError("Network error")
         mock_requests.session.return_value = mock_sess
         
         client = RuTrackerClient("login", "password")
-        with pytest.raises(RuTrackerAuthError):
+        with pytest.raises(RuTrackerRequestError) as exc_info:
             client._send_request("http://example.com")
+        assert exc_info.value.url == "http://example.com"
+        assert "Network error" in str(exc_info.value)
+        assert mock_sess.get.call_count == 3
     
     @patch('py_rutracker.clients.sync.requests')
     @patch.object(RuTrackerClient, 'auth')

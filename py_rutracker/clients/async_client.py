@@ -19,6 +19,7 @@ from ..logger import get_logger
 from ..models.search import SearchResult
 from ..models.search_form import SearchFormData
 from ..parsers.search_form import SearchFormParser
+from ..utils.retry import async_retry_on_network_error
 
 logger = get_logger(__name__)
 
@@ -67,20 +68,52 @@ class AsyncRuTrackerClient(BaseRuTrackerClient):
         """
         logger.debug("Начало процесса аутентификации")
         data = self._get_auth_data()
+        auth_url = Url.AUTH.value
+        try:
+            await self._send_auth_request(auth_url, data)
+            logger.info("Аутентификация успешно выполнена")
+        except RuTrackerRequestError as ex:
+            logger.error(f"Ошибка аутентификации: {ex}")
+            raise RuTrackerAuthError(
+                f"Ошибка при выполнении запроса: {ex.message}",
+                url=auth_url,
+                status_code=ex.status_code
+            ) from ex
+    
+    @async_retry_on_network_error(max_attempts=3, min_wait=2.0, max_wait=10.0)
+    async def _send_auth_request(self, url: str, data: dict) -> None:
+        """
+        Отправляет POST-запрос для аутентификации с поддержкой retry.
+        
+        :param url: URL для отправки запроса.
+        :param data: Данные для POST-запроса.
+        :raises RuTrackerRequestError: При сетевых ошибках или ошибках запроса.
+        :raises RuTrackerAuthError: При ошибках аутентификации.
+        """
         try:
             async with self.session.post(
-                Url.AUTH.value, data=data, proxy=self.proxy, ssl=self._ssl_context
+                url, data=data, proxy=self.proxy, ssl=self._ssl_context, timeout=aiohttp.ClientTimeout(total=30)
             ) as response:
                 text = await response.text()
                 has_cookies = bool(self.session.cookie_jar)
-                self._validate_auth_response(text, response.status, has_cookies)
-                logger.info("Аутентификация успешно выполнена")
-        except RuTrackerAuthError as ex:
-            logger.error(f"Ошибка аутентификации: {ex}")
+                status_code = response.status
+                self._validate_auth_response(text, status_code, has_cookies)
+        except RuTrackerAuthError:
             raise
         except Exception as ex:
-            logger.exception("Неожиданная ошибка при аутентификации")
-            raise RuTrackerAuthError(f"Ошибка при выполнении запроса: {ex}") from ex
+            ex_type_name = type(ex).__name__
+            is_network_error = ('ClientError' in ex_type_name or 
+                              'ClientConnectionError' in ex_type_name or 
+                              'ClientTimeout' in ex_type_name)
+            
+            if is_network_error:
+                logger.warning(f"Сетевая ошибка при выполнении запроса аутентификации: {ex}")
+            else:
+                logger.exception("Неожиданная ошибка при аутентификации")
+            raise RuTrackerRequestError(
+                f"Ошибка при выполнении запроса: {ex}",
+                url=url
+            ) from ex
 
     async def search(
         self, title: str, page: int = 1, return_search_dict: bool = False
@@ -93,6 +126,7 @@ class AsyncRuTrackerClient(BaseRuTrackerClient):
         :param return_search_dict: Флаг, указывающий, следует ли возвращать результаты
                                    в виде словарей (если True) или объектов SearchResult (если False).
         :return: Список результатов поиска.
+        :raises RuTrackerValidationError: Если параметры title или page не проходят валидацию.
         :raises RuTrackerRequestError: Если происходит ошибка при выполнении запроса.
         :raises RuTrackerParsingError: Если происходит ошибка при парсинге результатов поиска.
         """
@@ -101,29 +135,71 @@ class AsyncRuTrackerClient(BaseRuTrackerClient):
         params = self._build_search_params(title, page)
 
         try:
-            async with self.session.get(
-                url, params=params, ssl=self._ssl_context, proxy=self.proxy
-            ) as response:
-                if response.status != 200:
-                    logger.warning(f"Получен неожиданный статус-код: {response.status}")
-                    raise RuTrackerRequestError(
-                        f"Ошибка запроса: статус-код {response.status}"
-                    )
-
-                content = await response.text()
-                results = self._parse_search_results(content, return_search_dict)
-                logger.info(
-                    f"Поиск завершен успешно: найдено {len(results)} результатов на странице {page}"
-                )
-                return results
+            content = await self._send_get_request(url, params)
+            results = self._parse_search_results(content, return_search_dict)
+            logger.info(
+                f"Поиск завершен успешно: найдено {len(results)} результатов на странице {page}"
+            )
+            return results
         except RuTrackerRequestError:
             raise
         except RuTrackerParsingError as ex:
             logger.error(f"Ошибка парсинга результатов поиска: {ex}")
             raise
+    
+    @async_retry_on_network_error(max_attempts=3, min_wait=2.0, max_wait=10.0)
+    async def _send_get_request(self, url: str, params: dict = None) -> str:
+        """
+        Отправляет GET-запрос с поддержкой retry и возвращает текст ответа.
+        
+        :param url: URL для отправки запроса.
+        :param params: Параметры запроса.
+        :return: Текст ответа от сервера.
+        :raises RuTrackerRequestError: При ошибках запроса.
+        """
+        try:
+            async with self.session.get(
+                url, params=params, ssl=self._ssl_context, proxy=self.proxy, timeout=aiohttp.ClientTimeout(total=30)
+            ) as response:
+                if response.status != 200:
+                    logger.warning(f"Получен неожиданный статус-код: {response.status}")
+                    error = RuTrackerRequestError(
+                        f"Ошибка запроса: статус-код {response.status}",
+                        url=url,
+                        status_code=response.status,
+                        params=params
+                    )
+                    if 500 <= response.status < 600:
+                        raise error
+                    raise error
+
+                content = await response.text()
+                
+                if "top-login-box" in content:
+                    logger.warning("Обнаружена необходимость аутентификации")
+                    raise RuTrackerRequestError(
+                        "Необходима аутентификация.",
+                        url=url,
+                        status_code=response.status,
+                        params=params
+                    )
+                
+                return content
         except Exception as ex:
-            logger.exception("Неожиданная ошибка при выполнении поиска")
-            raise RuTrackerRequestError(f"Ошибка при выполнении поиска: {ex}") from ex
+            ex_type_name = type(ex).__name__
+            is_network_error = ('ClientError' in ex_type_name or 
+                              'ClientConnectionError' in ex_type_name or 
+                              'ClientTimeout' in ex_type_name)
+            
+            if is_network_error:
+                logger.warning(f"Сетевая ошибка при выполнении GET-запроса: {ex}")
+            else:
+                logger.exception("Неожиданная ошибка при выполнении запроса")
+            raise RuTrackerRequestError(
+                f"Ошибка при выполнении запроса: {ex}",
+                url=url,
+                params=params
+            ) from ex
 
     async def search_all_pages(
         self,
@@ -177,17 +253,42 @@ class AsyncRuTrackerClient(BaseRuTrackerClient):
         url, params = self._validate_download_params(topic_id_or_url)
 
         try:
+            content = await self._send_get_request_for_download(url, params, topic_id_or_url)
+            logger.info(f"Торрент успешно получен: размер {len(content)} байт")
+            return content
+        except (RuTrackerRequestError, RuTrackerDownloadError):
+            raise
+    
+    @async_retry_on_network_error(max_attempts=3, min_wait=2.0, max_wait=10.0)
+    async def _send_get_request_for_download(self, url: str, params: dict = None, topic_id_or_url: Union[int, str] = None) -> bytes:
+        """
+        Отправляет GET-запрос для скачивания торрента с поддержкой retry.
+        
+        :param url: URL для отправки запроса.
+        :param params: Параметры запроса.
+        :param topic_id_or_url: Идентификатор топика или URL (для контекста ошибок).
+        :return: Содержимое файла в виде байтов.
+        :raises RuTrackerRequestError: При ошибках запроса.
+        :raises RuTrackerDownloadError: При ошибках скачивания.
+        """
+        try:
             async with self.session.get(
-                url, params=params, ssl=self._ssl_context, proxy=self.proxy
+                url, params=params, ssl=self._ssl_context, proxy=self.proxy, timeout=aiohttp.ClientTimeout(total=30)
             ) as response:
 
                 if response.status != 200:
                     logger.warning(
                         f"Ошибка при получении торрента: статус-код {response.status}"
                     )
-                    raise RuTrackerRequestError(
-                        f"Ошибка при получении файла: {response.status}"
+                    error = RuTrackerRequestError(
+                        f"Ошибка при получении файла: {response.status}",
+                        url=url,
+                        status_code=response.status,
+                        params=params
                     )
+                    if 500 <= response.status < 600:
+                        raise error
+                    raise error
 
                 content = await response.read()
                 content_disposition = response.headers.get("Content-Disposition", "")
@@ -195,15 +296,31 @@ class AsyncRuTrackerClient(BaseRuTrackerClient):
                     logger.error(
                         "Файл не найден: отсутствует заголовок Content-Disposition"
                     )
-                    raise RuTrackerDownloadError("Файл с таким ID не найден")
+                    raise RuTrackerDownloadError(
+                        "Файл с таким ID не найден",
+                        topic_id_or_url=topic_id_or_url,
+                        url=url,
+                        status_code=response.status
+                    )
 
-                logger.info(f"Торрент успешно получен: размер {len(content)} байт")
                 return content
-        except (RuTrackerRequestError, RuTrackerDownloadError):
+        except (RuTrackerDownloadError, RuTrackerRequestError):
             raise
         except Exception as ex:
-            logger.exception("Неожиданная ошибка при получении торрента")
-            raise RuTrackerRequestError(f"Ошибка при получении торрента: {ex}") from ex
+            ex_type_name = type(ex).__name__
+            is_network_error = ('ClientError' in ex_type_name or 
+                              'ClientConnectionError' in ex_type_name or 
+                              'ClientTimeout' in ex_type_name)
+            
+            if is_network_error:
+                logger.warning(f"Сетевая ошибка при получении торрента: {ex}")
+            else:
+                logger.exception("Неожиданная ошибка при получении торрента")
+            raise RuTrackerRequestError(
+                f"Ошибка при получении торрента: {ex}",
+                url=url,
+                params=params
+            ) from ex
 
     async def download(
         self,
@@ -241,7 +358,8 @@ class AsyncRuTrackerClient(BaseRuTrackerClient):
         """
         if self.session is None or self.session.closed:
             raise RuTrackerRequestError(
-                "Сессия не инициализирована. Используйте await client.init() или async with client."
+                "Сессия не инициализирована. Используйте await client.init() или async with client.",
+                url=f"{Url.FORUM.value}/tracker.php"
             )
 
         if not force_refresh and self._is_search_form_cache_valid():
@@ -254,27 +372,10 @@ class AsyncRuTrackerClient(BaseRuTrackerClient):
 
         url = f"{Url.FORUM.value}/tracker.php"
         try:
-            async with self.session.get(
-                url, ssl=self._ssl_context, proxy=self.proxy
-            ) as response:
-                if response.status != 200:
-                    logger.warning(f"Получен неожиданный статус-код: {response.status}")
-                    raise RuTrackerRequestError(
-                        f"Ошибка запроса: статус-код {response.status}"
-                    )
-
-                text = await response.text()
-
-                if "top-login-box" in text:
-                    logger.warning("Обнаружена необходимость аутентификации")
-                    raise RuTrackerRequestError("Необходима аутентификация.")
+            text = await self._send_get_request(url, params=None)
         except RuTrackerRequestError:
             raise
-        except Exception as ex:
-            logger.exception("Неожиданная ошибка при запросе формы поиска")
-            raise RuTrackerRequestError(
-                f"Ошибка при получении формы поиска: {ex}"
-            ) from ex
+
 
         try:
             parser = SearchFormParser()
@@ -282,7 +383,11 @@ class AsyncRuTrackerClient(BaseRuTrackerClient):
             logger.info("Форма поиска успешно распарсена")
         except Exception as ex:
             logger.exception("Ошибка при парсинге формы поиска")
-            raise RuTrackerParsingError(f"Ошибка парсинга формы поиска: {ex}") from ex
+            html_snippet = text[:200] if text else None
+            raise RuTrackerParsingError(
+                f"Ошибка парсинга формы поиска: {ex}",
+                html_snippet=html_snippet
+            ) from ex
 
         self._set_search_form_cache(form_data)
 
